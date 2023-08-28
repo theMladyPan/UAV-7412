@@ -37,6 +37,7 @@
 uint8_t startReportCommand[] = { 0xC0, 0x87, 0x03, 0x08, 0x07, 0x00 };  // 192, 135, 3, 8, 7, 0
 
 BLEScan* pBLEScan;
+BLEAddress* steam_controller_mac = NULL;
 static bool ble_connected = false;
 
 static BLEUUID     hidUUID("00001812-0000-1000-8000-00805f9b34fb");
@@ -44,14 +45,11 @@ static BLEUUID serviceUUID("100F6C32-1735-4313-B402-38567131E5F3");  // Steam Co
 static BLEUUID   inputUUID("100F6C33-1735-4313-B402-38567131E5F3");  // Steam Controller Input characteristic UUID
 static BLEUUID    rprtUUID("100F6C34-1735-4313-B402-38567131E5F3");  // Steam Controller Report characteristic UUID
 
-void connectToController();
+void connectToController(BLEAddress steamControllerMac);
 
-BLEClient* pClient;
-BLERemoteService* pService;
-BLERemoteCharacteristic* pReportCharacteristic;
-BLERemoteCharacteristic* pInputCharacteristic;
-BLEAddress* pSteamControllerMac;
-esp_ble_addr_type_t steamControllerType;
+BLEService* pService;
+BLECharacteristic* pReportCharacteristic;
+BLECharacteristic* pInputCharacteristic;
 
 class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks {
   void onResult(BLEAdvertisedDevice advertisedDevice) {
@@ -60,25 +58,22 @@ class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks {
     // if device name is SteamController, connect to it:
     if (advertisedDevice.getName() == "SteamController") {
       ESP_LOGI("BLE Device", "Discovered device: %s", advertisedDevice.getAddress().toString().c_str());
-
+      // keep the address:
+      steam_controller_mac = new BLEAddress(advertisedDevice.getAddress());
       // stop scanning:
       pBLEScan->stop();
-      // connect to the device:
-      pSteamControllerMac = new BLEAddress(advertisedDevice.getAddress().toString());
-      steamControllerType = advertisedDevice.getAddressType();
-
-      connectToController();
     }
   }
 };
 
-class ConnectCallback : public BLEClientCallbacks {
-  void onConnect(BLEClient* pClient) {
-    log_i("Connected to BLE client!");
+class MyServerCallback : public BLEServerCallbacks {
+  void onConnect(BLEServer* pServer) {
+    log_i("Connected to BLE server!");
+    ble_connected = true;
   }
 
-  void onDisconnect(BLEClient* pClient) {
-    log_i("Disconnected from BLE client!");
+  void onDisconnect(BLEServer* pServer) {
+    log_i("Disconnected from BLE server!");
     ble_connected = false;
   }
 };
@@ -95,6 +90,11 @@ void setup() {
   pBLEScan->start(30);
 
   log_i("Scanning complete!");
+
+  // if we found the Steam Controller, connect to it:
+  if (steam_controller_mac != NULL) {
+    connectToController(*steam_controller_mac);
+  }
 }
 
 class InputCallback : public BLECharacteristicCallbacks {
@@ -120,72 +120,48 @@ class ReportCallback : public BLECharacteristicCallbacks {
   }
 };
 
-static void parsePacket(uint8_t* buf, size_t len) {
-  // print the packet:
-  log_i("Got packet: ");
-  for (int i = 0; i < len; i++) {
-    log_i("%02X ", buf[i]);
-  }
-}
 
-static void report_cbr(BLERemoteCharacteristic* pBLERemoteCharacteristic, uint8_t* buf, size_t len, bool isNotify)
-{
-  parsePacket(buf, len);
-}
-
-void connectToController() {
-  pClient = BLEDevice::createClient();
-  log_i("Created BLE client!");
-
-  pClient->setClientCallbacks(new ConnectCallback());
-
-  log_i("Connecting to Steam Controller...");
-  pClient->connect(*pSteamControllerMac, steamControllerType);
+void connectToController(BLEAddress steamControllerMac) {
+  BLEServer* pServer = BLEDevice::createServer();
+  log_i("Created BLE server!");
+  pServer->setCallbacks(new MyServerCallback());
+  pServer->connect(steamControllerMac);
   log_i("Connected to Steam Controller!");
+  delay(1e3);
 
-  pService = pClient->getService(serviceUUID);
-  if(pService == nullptr) {
-    log_i("Service is null!");
-    esp_restart();
-  }
+  pService = pServer->createService(serviceUUID);
+  // start the service:
+  pService->start();
+  log_i("Started service!");
 
   log_i("Created service!");
+  pInputCharacteristic = pService->createCharacteristic(
+    inputUUID, 
+    BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+  log_i("Got input characteristic!");
 
-  pInputCharacteristic = pService->getCharacteristic(inputUUID);
-  if(pInputCharacteristic == nullptr) {
+  if(pInputCharacteristic == NULL) {
     log_i("Input characteristic is null!");
     esp_restart();
   }
-  log_i("Got input characteristic!");
 
-  if(pInputCharacteristic->canNotify()) {
-    log_i("Input characteristic can notify!");
-      pInputCharacteristic->registerForNotify(report_cbr);
-  } else {
-    log_i("Input characteristic cannot notify!");
-  }
+  // set up the input characteristic:
+  pInputCharacteristic->setCallbacks(new InputCallback());
+  log_i("Set input characteristic callbacks!");
 
-  pReportCharacteristic = pService->getCharacteristic(rprtUUID);
-  if(pReportCharacteristic == nullptr) {
-    log_i("Report characteristic is null!");
-    esp_restart();
-  }
+  pReportCharacteristic = pService->createCharacteristic(
+    rprtUUID,
+    BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE
+    );
   log_i("Got report characteristic!");
 
-  if(pReportCharacteristic && pReportCharacteristic->canWrite())
-  {
-    pReportCharacteristic->writeValue(startReportCommand, sizeof(startReportCommand));
-  }
-  else
-  {
-    log_i("[BLE]   FAILED to start reporting");
-    pClient->disconnect();
-    esp_restart();
-  }
-  ble_connected = true;
+  pReportCharacteristic->setCallbacks(new ReportCallback());
+  log_i("Set report characteristic callbacks!");
 }
 
 void loop() {
+  pReportCharacteristic->setValue(startReportCommand, 6);
+  log_i("Set report characteristic value!");
   // Empty loop, BLE scanning and connection handled in setup()
   while(ble_connected) {
   }
