@@ -1,0 +1,292 @@
+#include <Arduino.h>
+
+#include <BLEDevice.h>
+#include <BLEUtils.h>
+#include <BLEClient.h>
+#include <BLEServer.h>
+#include <BLEAdvertisedDevice.h>
+#include <BLE2902.h>
+
+#define STEAM_CONTROLLER_BUTTON_A                  0x800000
+#define STEAM_CONTROLLER_BUTTON_X                  0x400000
+#define STEAM_CONTROLLER_BUTTON_B                  0x200000
+#define STEAM_CONTROLLER_BUTTON_Y                  0x100000
+#define STEAM_CONTROLLER_BUTTON_LEFT_UPPER_PADDLE  0x080000
+#define STEAM_CONTROLLER_BUTTON_RIGHT_UPPER_PADDLE 0x040000
+#define STEAM_CONTROLLER_BUTTON_LEFT_PADDLE        0x020000
+#define STEAM_CONTROLLER_BUTTON_RIGHT_PADDLE       0x010000
+#define STEAM_CONTROLLER_BUTTON_LEFT_INNER_PADDLE  0x008000
+#define STEAM_CONTROLLER_BUTTON_NAV_RIGHT          0x004000
+#define STEAM_CONTROLLER_BUTTON_STEAM              0x002000
+#define STEAM_CONTROLLER_BUTTON_NAV_LEFT           0x001000
+#define STEAM_CONTROLLER_BUTTON_JOYSTICK           0x000040
+#define STEAM_CONTROLLER_BUTTON_RIGHT_TOUCH        0x000010
+#define STEAM_CONTROLLER_BUTTON_LEFT_TOUCH         0x000008
+#define STEAM_CONTROLLER_BUTTON_RIGHT_PAD          0x000004
+#define STEAM_CONTROLLER_BUTTON_LEFT_PAD           0x000002
+#define STEAM_CONTROLLER_BUTTON_RIGHT_INNER_PADDLE 0x000001
+
+#define STEAM_CONTROLLER_FLAG_REPORT               0x0004
+#define STEAM_CONTROLLER_FLAG_BUTTONS              0x0010
+#define STEAM_CONTROLLER_FLAG_PADDLES              0x0020
+#define STEAM_CONTROLLER_FLAG_JOYSTICK             0x0080
+#define STEAM_CONTROLLER_FLAG_LEFT_PAD             0x0100
+#define STEAM_CONTROLLER_FLAG_RIGHT_PAD            0x0200
+
+
+// enable notifications:
+uint8_t startReportCommand[] = { 0xC0, 0x87, 0x03, 0x08, 0x07, 0x00 };  // 192, 135, 3, 8, 7, 0
+
+BLEScan* pBLEScan;
+static bool ble_connected = false;
+
+static BLEUUID     hidUUIDSteam("00001812-0000-1000-8000-00805f9b34fb");
+static BLEUUID serviceUUIDSteam("100F6C32-1735-4313-B402-38567131E5F3");  // Steam Controller Custom service UUID
+static BLEUUID   inputUUIDSteam("100F6C33-1735-4313-B402-38567131E5F3");  // Steam Controller Input characteristic UUID
+static BLEUUID    rprtUUIDSteam("100F6C34-1735-4313-B402-38567131E5F3");  // Steam Controller Report characteristic UUID
+static BLEUUID   espServiceUUID("4fafc201-1fb5-459e-8fcc-c5c9c331914b");  // ESP32 Service UUID
+static BLEUUID     espTxUUID("beb5483e-36e1-4688-b7f5-ea07361b26a8");  // ESP32 Input characteristic UUID
+static BLEUUID     espRxUUID("beb5483e-36e1-4688-b7f5-ea07361b26a9");  // ESP32 Report characteristic UUID
+
+void connectToController();
+void connectToESPController();
+
+BLEClient* pClient;
+BLERemoteService* pService;
+BLERemoteCharacteristic* pReportCharacteristic;
+BLERemoteCharacteristic* pInputCharacteristic;
+BLEAdvertisedDevice* pAdvertisedDevice;
+
+BLERemoteCharacteristic* pTxCharacteristics;
+BLERemoteCharacteristic* pRxCharacteristics;
+
+class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks {
+  void onResult(BLEAdvertisedDevice advertisedDevice) {
+    // print the mac address of the discovered device:
+    ESP_LOGI("BLE Device", "Discovered device name: %s", advertisedDevice.getName().c_str());
+    // if device name is SteamController, connect to it:
+    if (advertisedDevice.getName() == "UAV_ESP32") {
+      // stop scanning:
+      ESP_LOGI("BLE Device", "Stopping scan...");
+      pBLEScan->stop();
+
+      ESP_LOGI("BLE Device", "Connecting to device...");
+      pAdvertisedDevice = new BLEAdvertisedDevice(advertisedDevice);
+
+      connectToESPController();
+    }
+    else if(advertisedDevice.getName() == "SteamController") {
+      // stop scanning:
+      ESP_LOGI("BLE Device", "Stopping scan...");
+      pBLEScan->stop();
+
+      ESP_LOGI("BLE Device", "Connecting to device...");
+      pAdvertisedDevice = new BLEAdvertisedDevice(advertisedDevice);
+
+      connectToController();
+    }
+  }
+};
+
+class ConnectCallback : public BLEClientCallbacks {
+  void onConnect(BLEClient* pClient) {
+    log_i("Connected to BLE client!");
+  }
+
+  void onDisconnect(BLEClient* pClient) {
+    log_i("Disconnected from BLE client!");
+    ble_connected = false;
+  }
+};
+
+void setup() {
+  Serial.begin(115200);
+  log_i("Scanning for BLE devices...");
+
+  BLEDevice::init("ESP32");
+
+  pBLEScan = BLEDevice::getScan();
+  pBLEScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks());
+  pBLEScan->setActiveScan(true);
+  pBLEScan->start(30);
+
+  pClient = BLEDevice::createClient();
+  pClient->setClientCallbacks(new ConnectCallback());
+
+  log_i("Scanning complete!");
+}
+
+class InputCallback : public BLECharacteristicCallbacks {
+  void onNotify(BLECharacteristic* pCharacteristic, esp_ble_gatts_cb_param_t* param) {
+    std::string value = pCharacteristic->getValue();
+    log_i("Notified with value: %s", value.c_str());
+  }
+
+  void onRead(BLECharacteristic* pCharacteristic, esp_ble_gatts_cb_param_t* param) {
+    log_i("Read from Steam Controller!");
+  }
+};
+
+
+class ReportCallback : public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic* pCharacteristic) {
+    std::string value = pCharacteristic->getValue();
+    log_i("Got value: %s", value.c_str());
+  }
+
+  void onRead(BLECharacteristic* pCharacteristic, esp_ble_gatts_cb_param_t* param) {
+    log_i("Read from Steam Controller!");
+  }
+};
+
+static void parsePacket(uint8_t* buf, size_t len) {
+  // print the packet:
+  log_i("Got packet: ");
+  for (int i = 0; i < len; i++) {
+    log_i("%02X ", buf[i]);
+  }
+}
+
+static void report_cbr(BLERemoteCharacteristic* pBLERemoteCharacteristic, uint8_t* buf, size_t len, bool isNotify)
+{
+  parsePacket(buf, len);
+}
+
+void connectToESPController() {
+if(pAdvertisedDevice == nullptr) {
+    log_i("Steam Controller is null!");
+    delay(1e2);
+    esp_restart();
+  }
+
+  ESP_LOGI("BLE Device", "Discovered device: %s", pAdvertisedDevice->getAddress().toString().c_str());
+  ESP_LOGI("BLE Device", "RSSI: %d", pAdvertisedDevice->getRSSI());
+  ESP_LOGI("BLE Device", "Appearance: %d", pAdvertisedDevice->getAppearance());
+  ESP_LOGI("BLE Device", "Service UUID: %s", pAdvertisedDevice->getServiceUUID().toString().c_str());
+  ESP_LOGI("BLE Device", "Service Data: %s", pAdvertisedDevice->getServiceData().c_str());
+  ESP_LOGI("BLE Device", "Manufacturer Data: %s", pAdvertisedDevice->getManufacturerData().c_str());
+  ESP_LOGI("BLE Device", "TX Power: %d", pAdvertisedDevice->getTXPower());
+  ESP_LOGI("BLE Device", "Payload: %s", pAdvertisedDevice->getPayload());
+
+  pClient->connect(pAdvertisedDevice);
+  log_i("Connected to Steam Controller!");
+  delay(1e3);
+
+  std::map<std::string, BLERemoteService*>* services = pClient->getServices();
+  // print out services:
+  log_i("Found %d services:", services->size());
+  for (auto service : *services) {
+    log_i("Service: %s", service.first.c_str());
+    log_i("UUID: %s", service.second->getUUID().toString().c_str());
+  }
+
+  pService = pClient->getService(espServiceUUID);
+  if(pService == nullptr) {
+    log_i("Service is null!");
+    delay(1e2);
+    esp_restart();
+  }
+
+  log_i("Created service!");
+
+  pTxCharacteristics = pService->getCharacteristic(espTxUUID);
+  if(pTxCharacteristics == nullptr) {
+    log_i("Input characteristic is null!");
+    delay(1e2);
+    esp_restart();
+  }
+  log_i("Got input characteristic!");
+
+  if(pTxCharacteristics->canNotify()) {
+    log_i("Input characteristic can notify!");
+      pTxCharacteristics->registerForNotify(report_cbr);
+  } else {
+    log_i("Input characteristic cannot notify!");
+  }
+  pTxCharacteristics->registerForNotify(report_cbr);
+
+  pRxCharacteristics = pService->getCharacteristic(espRxUUID);
+  if(pRxCharacteristics == nullptr) {
+    log_i("Report characteristic is null!");
+    delay(1e2);
+    esp_restart();
+  }
+  log_i("Got report characteristic!");
+
+  ble_connected = true;
+}
+
+void connectToController() {
+  if(pAdvertisedDevice == nullptr) {
+    log_i("Steam Controller is null!");
+    delay(1e2);
+    esp_restart();
+  }
+
+  ESP_LOGI("BLE Device", "Discovered device: %s", pAdvertisedDevice->getAddress().toString().c_str());
+  ESP_LOGI("BLE Device", "RSSI: %d", pAdvertisedDevice->getRSSI());
+  ESP_LOGI("BLE Device", "Appearance: %d", pAdvertisedDevice->getAppearance());
+  ESP_LOGI("BLE Device", "Service UUID: %s", pAdvertisedDevice->getServiceUUID().toString().c_str());
+  ESP_LOGI("BLE Device", "Service Data: %s", pAdvertisedDevice->getServiceData().c_str());
+  ESP_LOGI("BLE Device", "Manufacturer Data: %s", pAdvertisedDevice->getManufacturerData().c_str());
+  ESP_LOGI("BLE Device", "TX Power: %d", pAdvertisedDevice->getTXPower());
+  ESP_LOGI("BLE Device", "Payload: %s", pAdvertisedDevice->getPayload());
+
+  pClient->connect(pAdvertisedDevice);
+  log_i("Connected to Steam Controller!");
+  delay(1e3);
+
+  pService = pClient->getService(serviceUUIDSteam);
+  if(pService == nullptr) {
+    log_i("Service is null!");
+    delay(1e2);
+    esp_restart();
+  }
+
+  log_i("Created service!");
+
+  pInputCharacteristic = pService->getCharacteristic(inputUUIDSteam);
+  if(pInputCharacteristic == nullptr) {
+    log_i("Input characteristic is null!");
+    delay(1e2);
+    esp_restart();
+  }
+  log_i("Got input characteristic!");
+
+  if(pInputCharacteristic->canNotify()) {
+    log_i("Input characteristic can notify!");
+      pInputCharacteristic->registerForNotify(report_cbr);
+  } else {
+    log_i("Input characteristic cannot notify!");
+  }
+
+  pReportCharacteristic = pService->getCharacteristic(rprtUUIDSteam);
+  if(pReportCharacteristic == nullptr) {
+    log_i("Report characteristic is null!");
+    delay(1e2);
+    esp_restart();
+  }
+  log_i("Got report characteristic!");
+
+  if(pReportCharacteristic && pReportCharacteristic->canWrite())
+  {
+    pReportCharacteristic->writeValue(startReportCommand, sizeof(startReportCommand));
+  }
+  else
+  {
+    log_i("[BLE]   FAILED to start reporting");
+    pClient->disconnect();
+    delay(1e2);
+    esp_restart();
+  }
+  ble_connected = true;
+}
+
+void loop() {
+  // Empty loop, BLE scanning and connection handled in setup()
+  while(ble_connected) {
+
+    delay(1e2);
+  }
+  //esp_restart();
+}
