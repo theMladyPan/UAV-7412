@@ -12,6 +12,7 @@ static boolean doConnect = false;
 static boolean connected = false;
 static boolean doScan = false;
 static BLERemoteCharacteristic* pRemoteCharacteristic;
+static BLERemoteCharacteristic* pRemoteRxCCharacteristic;
 static BLEAdvertisedDevice* myDevice;
 
 #define LOG_TAG "BLE_CLIENT"
@@ -72,6 +73,7 @@ bool connectToServer() {
     }
     ESP_LOGI(LOG_TAG, " - Found our characteristic: %s", txUUID.toString().c_str());
 
+
     // Read the value of the characteristic.
     if(pRemoteCharacteristic->canRead()) {
       std::string value = pRemoteCharacteristic->readValue();
@@ -80,6 +82,15 @@ bool connectToServer() {
 
     if(pRemoteCharacteristic->canNotify())
       pRemoteCharacteristic->registerForNotify(notifyCallback);
+
+    pRemoteRxCCharacteristic = pRemoteService->getCharacteristic(rxUUID);
+    if(pRemoteRxCCharacteristic == nullptr){
+      ESP_LOGI(LOG_TAG, "Failed to find our characteristic UUID: %s", rxUUID.toString().c_str());
+      pClient->disconnect();
+      return false;
+    }
+    ESP_LOGI(LOG_TAG, " - Found our characteristic: %s", rxUUID.toString().c_str());
+
 
     connected = true;
     return true;
@@ -150,6 +161,13 @@ void loop() {
     
     // Set the characteristic's value to be the array of bytes that is actually a string.
     // pRemoteCharacteristic->writeValue(newValue.c_str(), newValue.length());
+        // if can write:
+    if(pRemoteRxCCharacteristic->canWrite()){
+        auto timestamp = esp_timer_get_time();
+      std::string string_timestamp = std::to_string(timestamp);
+      pRemoteRxCCharacteristic->writeValue(string_timestamp.c_str(), string_timestamp.length());
+      delay(1000);
+    }
   }else if(doScan){
     BLEDevice::getScan()->start(0);  // this is just example to start scan after disconnect, most likely there is better way to do it in arduino
   }
