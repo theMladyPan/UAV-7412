@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "*.j2": "jinja-html",
+        "chrono": "cpp"
+    }
+}
