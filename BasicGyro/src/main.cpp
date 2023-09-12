@@ -23,6 +23,9 @@ TFT_eSPI tft = TFT_eSPI(135, 240);
 #define MIN_MICROS 500
 #define MAX_MICROS 2500
 
+#define LOOP_FREQ_HZ 10
+#define LOOP_PERIOD_US (1000000 / LOOP_FREQ_HZ)
+
 double Kp=1, Ki=10, Kd=0;
 
 //Define Variables we'll be connecting to
@@ -35,17 +38,7 @@ PID pid_yaw(&angle_z, &corr_z, &angle_z_set, Kp, Ki, Kd, DIRECT);
 
 IBusBM IBus;    // IBus object
 
-float convertRawGyro(int gRaw) {
-    float g = (gRaw * 1000.0) / 32768.0;
-    return g;
-}
-
-float convertRawAccel(int aRaw) {
-    float a = (aRaw * 2.0) / 32768.0;
-    return a;
-}
-
-void setupPids() {
+void setup_PIDs() {
     //turn the PID on
     pid_roll.SetMode(AUTOMATIC);
     pid_roll.SetSampleTime(1);
@@ -68,7 +61,7 @@ public:
     IServo(uint8_t pin) {
 	    _servoIndex = ESP32_ISR_Servos.setupServo(pin, MIN_MICROS, MAX_MICROS);
     }
-    void setAngle(int angle) {
+    void set_angle(int angle) {
         ESP32_ISR_Servos.setPosition(_servoIndex, angle + 90);
     }
 
@@ -76,23 +69,25 @@ private:
     int8_t _servoIndex;
 };
 
+
 class VectorOperations {
 public:
-    static void axesToVector(std::array<float, 3> &vec, float ax, float ay, float az) {
+    static void axes_to_vector(std::array<float, 3> &vec, float ax, float ay, float az) {
         vec[0] = ax;
         vec[1] = ay;
         vec[2] = az;
     }
 
-    static float vectorLength(std::array<float, 3> &vec) {
+    static float get_vector_length(std::array<float, 3> &vec) {
         return sqrt(vec[0] * vec[0] + vec[1] * vec[1] + vec[2] * vec[2]);
     }
 };
 
+
 class BaseIMU { 
 public:
-    virtual void getRotations(std::array<float, 3> &rotations) = 0;
-    virtual void getAccelerations(std::array<float, 3> &accelerations) = 0;
+    virtual void get_rotations(std::array<float, 3> &rotations) = 0;
+    virtual void get_accelerations(std::array<float, 3> &accelerations) = 0;
 };
 
 class IMU: public BMI160GenClass, public BaseIMU {
@@ -111,20 +106,43 @@ public:
         ESP_LOGD("IMU", "Setting accelerometer range done.");
         this->setFullScaleAccelRange(BMI160_ACCEL_RANGE_2G);
     }
-    void getRotations(std::array<float, 3> &rotations) {
-        int gxRaw, gyRaw, gzRaw;         // raw gyro values
-        this->readGyro(gxRaw, gyRaw, gzRaw);
-        rotations[0] = convertRawGyro(gxRaw);
-        rotations[1] = convertRawGyro(gyRaw);
-        rotations[2] = convertRawGyro(gzRaw);
+
+    /**
+     * @brief Read raw gyro values from device and convert to degrees per second
+     * 
+     * @param gRaw 
+     * @return float 
+     */
+    float convert_raw_gyro(int gRaw) {
+        float g = (gRaw * 1000.0) / 32768.0;
+        return g;
     }
 
-    void getAccelerations(std::array<float, 3> &accelerations) {
+    /**
+     * @brief Read raw accelerometer values from device and convert to g
+     * 
+     * @param aRaw 
+     * @return float 
+     */
+    float convert_raw_accel(int aRaw) {
+        float a = (aRaw * 2.0) / 32768.0;
+        return a;
+    }
+
+    void get_rotations(std::array<float, 3> &rotations) {
+        int gxRaw, gyRaw, gzRaw;         // raw gyro values
+        this->readGyro(gxRaw, gyRaw, gzRaw);
+        rotations[0] = convert_raw_gyro(gxRaw);
+        rotations[1] = convert_raw_gyro(gyRaw);
+        rotations[2] = convert_raw_gyro(gzRaw);
+    }
+
+    void get_accelerations(std::array<float, 3> &accelerations) {
         int axRaw, ayRaw, azRaw;         // raw gyro values
         this->readAccelerometer(axRaw, ayRaw, azRaw);
-        accelerations[0] = convertRawAccel(axRaw);
-        accelerations[1] = convertRawAccel(ayRaw);
-        accelerations[2] = convertRawAccel(azRaw);
+        accelerations[0] = convert_raw_accel(axRaw);
+        accelerations[1] = convert_raw_accel(ayRaw);
+        accelerations[2] = convert_raw_accel(azRaw);
     }
 };
 
@@ -133,7 +151,7 @@ private:
     std::array<float, 3> _rotations = {0, 0, 0};
     std::array<float, 3> _accelerations = {0, 0, 0};
 public:
-    void getRotations(std::array<float, 3> &rotations) {
+    void get_rotations(std::array<float, 3> &rotations) {
         // get some random values in range (-10, 10) and add to the base values,
         rotations[0] = _rotations[0] + rnd();
         rotations[1] = _rotations[1] + rnd();
@@ -143,7 +161,7 @@ public:
         
     }
 
-    void getAccelerations(std::array<float, 3> &accelerations) {
+    void get_accelerations(std::array<float, 3> &accelerations) {
         // do the same for accelerations
         accelerations[0] = _accelerations[0] + rnd() / 10.0;
         accelerations[1] = _accelerations[1] + rnd() / 10.0;
@@ -162,51 +180,240 @@ public:
         _orientation[1] = 0;
         _orientation[2] = 0;
     } 
-    void setRoll(float roll) {
+    void set_roll(float roll) {
         _orientation[0] = roll;
     }   
-    void setPitch(float pitch) {
+    void set_pitch(float pitch) {
         _orientation[1] = pitch;
     }
-    void setYaw(float yaw) {
+    void set_yaw(float yaw) {
         _orientation[2] = yaw;
     }
-    float getRoll() {
+    float get_roll() {
         return _orientation[0];
     }
-    float getPitch() {
+    float get_pitch() {
         return _orientation[1];
     }
-    float getYaw() {
+    float get_yaw() {
         return _orientation[2];
     }
 };
 
+
 class Aircraft {
 private:
-    std::array<float, 3> _accelerometer;
-    std::array<float, 3> _gyro;
-    std::array<float, 3> _accelerations;
-    Orientation _orientation;
-    BaseIMU *_imu;
-public:
-    Aircraft(BaseIMU *imu) { 
-        _imu = imu;
-    }
-    void calculate(std::array<float, 3> _desiredOrientation) {
-        // read raw gyro measurements from device
-        _imu->getRotations(_gyro);
-        // read raw accelerometer measurements from device
-        _imu->getAccelerations(_accelerometer);
+    std::array<float, 3> _gyro_vals;
+    std::array<float, 3> _acc_vals;
+    std::array<float, 3> _desired_orientation;
+    float _desired_throttle;
 
-        float len = VectorOperations::vectorLength(_accelerometer);
-        // convert to unit vector
-        for (auto &v : _accelerometer) {
-            v /= len;
-        }
-        len = VectorOperations::vectorLength(_accelerometer);  // should be 1
-    }
+    BaseIMU *_imu;
+    IServo _servo_taileron_l;
+    IServo _servo_taileron_r;
+    IServo _servo_rudder;
+    IServo _throttle;
     
+    float _throttle_value;
+    float _taileron_left_value;
+    float _taileron_right_value;
+    float _rudder_value;
+
+    bool _invert_taileron_left;
+    bool _invert_taileron_right;
+    bool _control_rudder;
+    bool _control_throttle;
+
+    // gains to correct values from control
+    float _throttle_gain = 1;
+    float _roll_gain = 1;
+    float _pitch_gain = 1;
+    float _yaw_gain = 1;
+
+    // calculated values for steering:
+    float _roll_corr;
+    float _pitch_corr;
+    float _yaw_corr;
+    float _throttle_corr;
+
+public:
+    Aircraft(
+            BaseIMU *imu, 
+            bool control_rudder = true, 
+            bool control_throttle = true, 
+            bool invert_taileron_left = false, 
+            bool invert_taileron_right = false) : 
+        _control_rudder(control_rudder), 
+        _control_throttle(control_throttle),
+        _invert_taileron_left(invert_taileron_left),
+        _invert_taileron_right(invert_taileron_right) { 
+        _imu = imu;
+        _servo_taileron_l = IServo(PIN_SERVO_TAILERON_L);
+        _servo_taileron_r = IServo(PIN_SERVO_TAILERON_R);
+        _servo_rudder = IServo(PIN_SERVO_RUDDER);
+        _throttle = IServo(PIN_THROTTLE);
+    }
+
+    void setup(
+            float throttle_gain, 
+            float roll_gain, 
+            float pitch_gain, 
+            float yaw_gain) {
+        _throttle_gain = throttle_gain;
+        _roll_gain = roll_gain;
+        _pitch_gain = pitch_gain;
+        _yaw_gain = yaw_gain;
+    }
+
+    void calculate_corrections(Control *control) {
+        // calculate corrections read data from IMU first
+        read_imu();
+        // calculate corrections
+        control->get_desired_orientation(_desired_orientation, _desired_throttle);
+        calculate_roll_correction(_desired_orientation[0]);
+        calculate_pitch_correction(_desired_orientation[1]);
+        calculate_yaw_correction(_desired_orientation[2]);
+    }
+
+    void calculate_roll_correction(float desired_roll) {
+        _roll_corr = 0;  // TODO
+    }
+
+    void calculate_pitch_correction(float desired_pitch) {
+        _pitch_corr = 0;  // TODO
+    }
+
+    void calculate_yaw_correction(float desired_yaw) {
+        _yaw_corr = (desired_yaw * _yaw_gain) - _gyro_vals[2];
+    }
+
+    void steer() {
+        // steer the aircraft
+        set_tailerons();
+        set_rudder();
+        set_throttle();
+    }
+
+    void read_imu() {
+        // read raw gyro measurements from device
+        _imu->get_rotations(_gyro_vals);
+        // read raw accelerometer measurements from device
+        _imu->get_accelerations(_acc_vals);
+        ESP_LOGD("Aircraft", "Gyro: %f, %f, %f", _gyro_vals[0], _gyro_vals[1], _gyro_vals[2]);
+        ESP_LOGD("Aircraft", "Acc: %f, %f, %f", _acc_vals[0], _acc_vals[1], _acc_vals[2]);
+    }
+
+    /**
+     * @brief Set the rudder angle
+     * 
+     * @param angle in degrees in range -90, 90
+     */
+    void set_taileron_left(float angle) {
+        // set angle of left taileron
+        // left is probably inverted, so invert angle
+        if (_invert_taileron_left) {
+            angle = -angle;
+        }
+        // TODO covert angle from range -90, 90 if necessary
+        _servo_taileron_l.set_angle(angle);
+        ESP_LOGD("Aircraft", "Set taileron left to %f", angle);
+    }
+
+    /**
+     * @brief Set the rudder angle
+     * 
+     * @param angle in degrees in range -90, 90
+     */
+    void set_taileron_right(float angle) {
+        // set angle of right taileron
+        // TODO covert angle from range -90, 90 if necessary
+        _servo_taileron_l.set_angle(angle);
+        ESP_LOGD("Aircraft", "Set taileron right to %f", angle);
+    }
+
+    /**
+     * @brief Set the rudder angle
+     * 
+     * @param throttle in range 0, 100
+     */
+    void set_throttle() {
+        // set throttle
+        // TODO covert throttle to range 0, 100 if necessary
+        _throttle.set_angle(_throttle_corr);
+        ESP_LOGD("Aircraft", "Set throttle to %f", _throttle_corr);
+    }
+
+    void set_tailerons() {
+        _taileron_left_value = _roll_corr;
+        _taileron_right_value = -_roll_corr;
+        _taileron_left_value += _pitch_corr;
+        _taileron_right_value += _pitch_corr;
+
+        set_taileron_left(_taileron_left_value);
+        set_taileron_right(_taileron_right_value);
+    }
+
+    void set_rudder() {
+        // set rudder angle
+        // TODO convert angle from range -90, 90 if necessary
+        _rudder_value = _yaw_corr;
+        _servo_rudder.set_angle(_rudder_value);
+        ESP_LOGD("Aircraft", "Set rudder to %f", _rudder_value);
+    }
+};
+
+class Control {
+protected:
+    std::array<float, 3> _desired_orientation;
+    float _desired_throttle;
+public:
+    void get_desired_orientation(
+            std::array<float, 3> &desired_orientation, 
+            float desired_throttle) {
+        std::copy(
+            _desired_orientation.begin(), 
+            _desired_orientation.end(), 
+            desired_orientation.begin()
+        );
+    }
+
+    void get_desired_throttle(float &desired_throttle) {
+        desired_throttle = _desired_throttle;
+    }
+
+    virtual void update() = 0;
+};
+
+
+class RemoteControl : public Control {
+private:
+    IBusBM _ibus;
+public:
+    RemoteControl() {
+        _ibus.begin(Serial2,1);
+    }
+
+    void update() {
+        _desired_orientation[0] = _ibus.readChannel(0);
+        _desired_orientation[1] = _ibus.readChannel(1);
+        _desired_orientation[2] = _ibus.readChannel(2);
+        _desired_throttle = _ibus.readChannel(3);
+    }
+};
+
+
+class Autopilot : public Control {
+private:
+    std::array<float, 3> _desired_orientation;
+public:
+    Autopilot() { }
+
+    void update() {
+        _desired_orientation[0] = 0;
+        _desired_orientation[1] = 0;
+        _desired_orientation[2] = 0;
+        _desired_throttle = 0;
+    }
 };
 
 
@@ -222,45 +429,38 @@ void setup() {
     #endif // TFT_DISPLAY
 
 	ESP32_ISR_Servos.useTimer(0);
-    IBus.begin(Serial2,1);
 
     ESP_LOGI("main", "Starting BMI160");
 }
 
 void loop() {
-    std::array<float, 3> accelerations;
-    std::array<float, 3> rotations;
-    Orientation O;
-    std::array<float, 3> desiredOrientation;
-
     #ifdef MOCKUP
-    MockupIMU Imu;
+    MockupIMU *Imu = new MockupIMU();
     #else
-    IMU Imu;    
+    IMU *Imu = new IMU();    
     #endif // MOCKUP
-    Aircraft aircraft(*Imu);
+    Aircraft aircraft(Imu);
+    aircraft.setup(1, 1, 1, 1);
+
+    #ifdef AUTOPILOT
+    Control *control = new Autopilot();
+    #else
+    Control *control = new RemoteControl();
+    #endif // AUTOPILOT
 
     uint64_t iter = 0;
 
-    IServo servoTaileronL(PIN_SERVO_TAILERON_L);
-    IServo servoTaileronR(PIN_SERVO_TAILERON_R);
-    IServo servoRudder(PIN_SERVO_RUDDER);
-    IServo throttle(PIN_THROTTLE);
-
     while(1) {
         auto start = std::chrono::high_resolution_clock::now();
-        desiredOrientation[0] = IBus.readChannel(0);
-        desiredOrientation[1] = IBus.readChannel(1);
-        desiredOrientation[2] = IBus.readChannel(3);
-        float desiredThrottle = IBus.readChannel(2); 
 
-        aircraft.calculate(desiredOrientation);
+        aircraft.calculate_corrections(control);
+        aircraft.steer();
 
         auto end = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
         int dt = duration.count();
-        if (dt < 1000) {
-            delayMicroseconds(1000 - dt);
+        if (dt < LOOP_PERIOD_US) {
+            delayMicroseconds(LOOP_PERIOD_US - dt);
         }
         if (iter++ % 100 == 0) {
             // ESP_LOGI("main", "Angle: " << angle_x << ", " << corr_x << ", dt: " << dt << "s");
