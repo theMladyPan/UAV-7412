@@ -201,6 +201,61 @@ public:
 };
 
 
+class Control {
+protected:
+    std::array<float, 3> _desired_orientation;
+    float _desired_throttle;
+public:
+    void get_desired_orientation(
+            std::array<float, 3> &desired_orientation, 
+            float desired_throttle) {
+        std::copy(
+            _desired_orientation.begin(), 
+            _desired_orientation.end(), 
+            desired_orientation.begin()
+        );
+    }
+
+    void get_desired_throttle(float &desired_throttle) {
+        desired_throttle = _desired_throttle;
+    }
+
+    virtual void update() = 0;
+};
+
+
+class RemoteControl : public Control {
+private:
+    IBusBM _ibus;
+public:
+    RemoteControl() {
+        _ibus.begin(Serial2,1);
+    }
+
+    void update() {
+        _desired_orientation[0] = _ibus.readChannel(0);
+        _desired_orientation[1] = _ibus.readChannel(1);
+        _desired_orientation[2] = _ibus.readChannel(2);
+        _desired_throttle = _ibus.readChannel(3);
+    }
+};
+
+
+class Autopilot : public Control {
+private:
+    std::array<float, 3> _desired_orientation;
+public:
+    Autopilot() { }
+
+    void update() {
+        _desired_orientation[0] = 0;
+        _desired_orientation[1] = 0;
+        _desired_orientation[2] = 0;
+        _desired_throttle = 0;
+    }
+};
+
+
 class Aircraft {
 private:
     std::array<float, 3> _gyro_vals;
@@ -265,11 +320,11 @@ public:
         _yaw_gain = yaw_gain;
     }
 
-    void calculate_corrections(Control *control) {
+    void calculate_corrections(Control *controler) {
         // calculate corrections read data from IMU first
         read_imu();
         // calculate corrections
-        control->get_desired_orientation(_desired_orientation, _desired_throttle);
+        controler->get_desired_orientation(_desired_orientation, _desired_throttle);
         calculate_roll_correction(_desired_orientation[0]);
         calculate_pitch_correction(_desired_orientation[1]);
         calculate_yaw_correction(_desired_orientation[2]);
@@ -362,60 +417,6 @@ public:
     }
 };
 
-class Control {
-protected:
-    std::array<float, 3> _desired_orientation;
-    float _desired_throttle;
-public:
-    void get_desired_orientation(
-            std::array<float, 3> &desired_orientation, 
-            float desired_throttle) {
-        std::copy(
-            _desired_orientation.begin(), 
-            _desired_orientation.end(), 
-            desired_orientation.begin()
-        );
-    }
-
-    void get_desired_throttle(float &desired_throttle) {
-        desired_throttle = _desired_throttle;
-    }
-
-    virtual void update() = 0;
-};
-
-
-class RemoteControl : public Control {
-private:
-    IBusBM _ibus;
-public:
-    RemoteControl() {
-        _ibus.begin(Serial2,1);
-    }
-
-    void update() {
-        _desired_orientation[0] = _ibus.readChannel(0);
-        _desired_orientation[1] = _ibus.readChannel(1);
-        _desired_orientation[2] = _ibus.readChannel(2);
-        _desired_throttle = _ibus.readChannel(3);
-    }
-};
-
-
-class Autopilot : public Control {
-private:
-    std::array<float, 3> _desired_orientation;
-public:
-    Autopilot() { }
-
-    void update() {
-        _desired_orientation[0] = 0;
-        _desired_orientation[1] = 0;
-        _desired_orientation[2] = 0;
-        _desired_throttle = 0;
-    }
-};
-
 
 void setup() {
     Serial.begin(1000000);
@@ -443,9 +444,9 @@ void loop() {
     aircraft.setup(1, 1, 1, 1);
 
     #ifdef AUTOPILOT
-    Control *control = new Autopilot();
+    Control *controler = new Autopilot();
     #else
-    Control *control = new RemoteControl();
+    Control *controler = new RemoteControl();
     #endif // AUTOPILOT
 
     uint64_t iter = 0;
@@ -453,7 +454,7 @@ void loop() {
     while(1) {
         auto start = std::chrono::high_resolution_clock::now();
 
-        aircraft.calculate_corrections(control);
+        aircraft.calculate_corrections(controler);
         aircraft.steer();
 
         auto end = std::chrono::high_resolution_clock::now();
@@ -463,9 +464,7 @@ void loop() {
             delayMicroseconds(LOOP_PERIOD_US - dt);
         }
         if (iter++ % 100 == 0) {
-            // ESP_LOGI("main", "Angle: " << angle_x << ", " << corr_x << ", dt: " << dt << "s");
-            ESP_LOGI("main", "Angle: %f°, %f°, dt: %dus", angle_x, corr_x, dt);
-            ESP_LOGD("main", "Accelerations: %f, %f, %f", accelerations[0], accelerations[1], accelerations[2]);
+            // print here some statistics
         }
     }
 }
