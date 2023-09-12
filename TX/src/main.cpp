@@ -2,11 +2,12 @@
 //#include "BLEScan.h"
 #include <Arduino.h>
 
-// The remote service we wish to connect to.
-static BLEUUID serviceUUID("4fafc201-1fb5-459e-8fcc-c5c9c331914b");
-// The characteristic of the remote service we are interested in.
-static BLEUUID    txUUID("beb5483e-36e1-4688-b7f5-ea07361b26a8");
-static BLEUUID    rxUUID("beb5483e-36e1-4688-b7f5-ea07361b26a9");
+static BLEUUID     hidUUID("00001812-0000-1000-8000-00805f9b34fb"); /* controller announces this service */
+static BLEUUID serviceUUID("100F6C32-1735-4313-B402-38567131E5F3"); /* but instead use this one */
+static BLEUUID   inputUUID("100F6C33-1735-4313-B402-38567131E5F3"); /* and this characterstic within it to receive the reports */
+static BLEUUID    rprtUUID("100F6C34-1735-4313-B402-38567131E5F3"); /* plus this one to configure the controller for sending */
+uint8_t startReportCommand[] = { 0xC0, 0x87, 0x03, 0x08, 0x07, 0x00 }; /* command sent to enable report sending. see: https://github.com/haxpor/sdl2-samples/blob/master/android-project/app/src/main/java/org/libsdl/app/HIDDeviceBLESteamController.java */
+
 
 static boolean doConnect = false;
 static boolean connected = false;
@@ -22,9 +23,8 @@ static void notifyCallback(
   uint8_t* pData,
   size_t length,
   bool isNotify) {
-    ESP_LOGI(LOG_TAG, "Notify callback for characteristic %s of data length %d", pBLERemoteCharacteristic->getUUID().toString().c_str(), length);
-    ESP_LOGI(LOG_TAG, "data: %s", pData);
-
+    auto rcvd = pBLERemoteCharacteristic->readRawData();
+    ESP_LOGI(LOG_TAG, "Received data #: %s", pBLERemoteCharacteristic->readValue().c_str());
 }
 
 class MyClientCallback : public BLEClientCallbacks {
@@ -50,10 +50,11 @@ bool connectToServer() {
 
     // Connect to the remove BLE Server.
     pClient->connect(myDevice);  // if you pass BLEAdvertisedDevice instead of address, it will be recognized type of peer device address (public or private)
-    ESP_LOGI(LOG_TAG, " - Connected to server");
-    pClient->setMTU(517); //set client to request maximum MTU from server (default is 23 otherwise)
+    ESP_LOGI(LOG_TAG, "Connected to server");
+    // pClient->setMTU(517); //set client to request maximum MTU from server (default is 23 otherwise)
     
-    delay(3e3);
+    ESP_LOGI(LOG_TAG, "Waiting for Steam Controller to become ready");
+    delay(10e3);
     // Obtain a reference to the service we are after in the remote BLE server.
     BLERemoteService* pRemoteService = pClient->getService(serviceUUID);
     if (pRemoteService == nullptr) {
@@ -61,36 +62,40 @@ bool connectToServer() {
       pClient->disconnect();
       return false;
     }
-    ESP_LOGI(LOG_TAG, " - Found our service: %s", serviceUUID.toString().c_str());
+    ESP_LOGI(LOG_TAG, "Found our service: %s", serviceUUID.toString().c_str());
 
 
     // Obtain a reference to the characteristic in the service of the remote BLE server.
-    pRemoteCharacteristic = pRemoteService->getCharacteristic(txUUID);
+    pRemoteCharacteristic = pRemoteService->getCharacteristic(inputUUID);
     if (pRemoteCharacteristic == nullptr) {
-      ESP_LOGI(LOG_TAG, "Failed to find our characteristic UUID: %s", txUUID.toString().c_str());
+      ESP_LOGI(LOG_TAG, "Failed to find our characteristic UUID: %s", inputUUID.toString().c_str());
       pClient->disconnect();
       return false;
     }
-    ESP_LOGI(LOG_TAG, " - Found our characteristic: %s", txUUID.toString().c_str());
-
-
-    // Read the value of the characteristic.
-    if(pRemoteCharacteristic->canRead()) {
-      std::string value = pRemoteCharacteristic->readValue();
-      ESP_LOGI(LOG_TAG, "The characteristic value was: %s", value.c_str());
-    }
+    ESP_LOGI(LOG_TAG, "Found input characteristic: %s", inputUUID.toString().c_str());
 
     if(pRemoteCharacteristic->canNotify())
       pRemoteCharacteristic->registerForNotify(notifyCallback);
 
-    pRemoteRxCCharacteristic = pRemoteService->getCharacteristic(rxUUID);
+    pRemoteRxCCharacteristic = pRemoteService->getCharacteristic(rprtUUID);
     if(pRemoteRxCCharacteristic == nullptr){
-      ESP_LOGI(LOG_TAG, "Failed to find our characteristic UUID: %s", rxUUID.toString().c_str());
+      ESP_LOGI(LOG_TAG, "Failed to find our characteristic UUID: %s", rprtUUID.toString().c_str());
       pClient->disconnect();
       return false;
     }
-    ESP_LOGI(LOG_TAG, " - Found our characteristic: %s", rxUUID.toString().c_str());
+    ESP_LOGI(LOG_TAG, "Found our characteristic: %s", rprtUUID.toString().c_str());
 
+    if(pRemoteRxCCharacteristic && pRemoteRxCCharacteristic->canWrite())
+    {
+      ESP_LOGI(LOG_TAG, "Writing report start command");
+      pRemoteRxCCharacteristic->writeValue(startReportCommand, sizeof(startReportCommand));
+    }
+    else
+    {
+      ESP_LOGI(LOG_TAG, "FAILED to start reporting");
+      pClient->disconnect();
+      return false;
+    }
 
     connected = true;
     return true;
@@ -108,7 +113,7 @@ class MyAdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
     // We have found a device, let us now see if it contains the service we are looking for.
     if (advertisedDevice.haveServiceUUID() 
         && advertisedDevice.isAdvertisingService(serviceUUID)
-        && advertisedDevice.getName() == "UAV_ESP32"
+        && advertisedDevice.getName() == "SteamController"
         ) {
 
       BLEDevice::getScan()->stop();
@@ -122,7 +127,7 @@ class MyAdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
 
 
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(1500000);
   BLEDevice::init("");
   ESP_LOGI(LOG_TAG, "BLE Client Started");
 
@@ -156,6 +161,7 @@ void loop() {
   // If we are connected to a peer BLE Server, update the characteristic each time we are reached
   // with the current time since boot.
   if (connected) {
+    /*
     String newValue = "Time since boot: " + String(millis()/1000);
     ESP_LOGI(LOG_TAG, "Setting new characteristic value to \"%s\"", newValue.c_str());
     
@@ -168,6 +174,7 @@ void loop() {
       pRemoteRxCCharacteristic->writeValue(string_timestamp.c_str(), string_timestamp.length());
       delay(1000);
     }
+    */
   }else if(doScan){
     BLEDevice::getScan()->start(0);  // this is just example to start scan after disconnect, most likely there is better way to do it in arduino
   }
