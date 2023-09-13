@@ -7,6 +7,9 @@
 #include "ESP32_ISR_Servo.h"
 #include "esp_log.h"
 #include <IBusBM.h>
+#include <ArduinoEigenDense.h>
+
+using namespace Eigen;
 
 #ifdef TFT_DISPLAY
 #include <TFT_eSPI.h>
@@ -85,9 +88,13 @@ public:
 
 
 class BaseIMU { 
+protected:
+    Eigen::Matrix3f _base_rotation;
+    std::array<float, 3> _gyro_null_val;
 public:
     virtual void get_rotations(std::array<float, 3> &rotations) = 0;
     virtual void get_accelerations(std::array<float, 3> &accelerations) = 0;
+    virtual void calibrate(uint n_samples) = 0;
 };
 
 class IMU: public BMI160GenClass, public BaseIMU {
@@ -132,9 +139,9 @@ public:
     void get_rotations(std::array<float, 3> &rotations) {
         int gxRaw, gyRaw, gzRaw;         // raw gyro values
         this->readGyro(gxRaw, gyRaw, gzRaw);
-        rotations[0] = convert_raw_gyro(gxRaw);
-        rotations[1] = convert_raw_gyro(gyRaw);
-        rotations[2] = convert_raw_gyro(gzRaw);
+        rotations[0] = convert_raw_gyro(gxRaw) - _gyro_null_val[0]; 
+        rotations[1] = convert_raw_gyro(gyRaw) - _gyro_null_val[1]; 
+        rotations[2] = convert_raw_gyro(gzRaw) - _gyro_null_val[2]; 
     }
 
     void get_accelerations(std::array<float, 3> &accelerations) {
@@ -143,6 +150,10 @@ public:
         accelerations[0] = convert_raw_accel(axRaw);
         accelerations[1] = convert_raw_accel(ayRaw);
         accelerations[2] = convert_raw_accel(azRaw);
+    }
+
+    void calibrate(uint n_samples) {
+        // TODO
     }
 };
 
@@ -167,6 +178,10 @@ public:
         accelerations[1] = _accelerations[1] + rnd() / 10.0;
         accelerations[2] = _accelerations[2] + rnd() / 10.0;
         std::copy(accelerations.begin(), accelerations.end(), _accelerations.begin());
+    }
+
+    void calibrate(uint n_samples) {
+        // TODO
     }
 };
 
@@ -291,6 +306,19 @@ private:
     float _yaw_corr;
     float _throttle_corr;
 
+    // properties
+    float _mass;
+    float _wing_area;
+    float _max_thrust;
+    float _lift_coefficient;
+
+    void compensate_thrust() {
+        // assume linear thrust curve for now
+        float current_thrust = _throttle_value * _max_thrust;
+        // compensate for thrust:
+        _acc_vals[0] -= current_thrust;
+    }
+    
 public:
     Aircraft(
             BaseIMU *imu, 
@@ -320,11 +348,24 @@ public:
         _yaw_gain = yaw_gain;
     }
 
-    void calculate_corrections(Control *controler) {
+    void properties(
+            float mass,
+            float wing_area,
+            float thrust,
+            float lift_coefficient) {
+        _mass = mass;
+        _wing_area = wing_area;
+        _max_thrust = thrust;
+        _lift_coefficient = lift_coefficient;
+    }
+
+    void calculate_corrections(Control *controller) {
         // calculate corrections read data from IMU first
         read_imu();
+        compensate_thrust();
+
         // calculate corrections
-        controler->get_desired_orientation(_desired_orientation, _desired_throttle);
+        controller->get_desired_orientation(_desired_orientation, _desired_throttle);
         calculate_roll_correction(_desired_orientation[0]);
         calculate_pitch_correction(_desired_orientation[1]);
         calculate_yaw_correction(_desired_orientation[2]);
@@ -440,8 +481,10 @@ void loop() {
     #else
     IMU *Imu = new IMU();    
     #endif // MOCKUP
+
     Aircraft aircraft(Imu);
     aircraft.setup(1, 1, 1, 1);
+    aircraft.properties(1.3, 0.3, 15, 0.87);
 
     #ifdef AUTOPILOT
     Control *controller = new Autopilot();
