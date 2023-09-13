@@ -330,11 +330,13 @@ private:
     IServo _servo_rudder;
     IServo _throttle;
     
-    float _throttle_value;
-    float _taileron_left_value;
-    float _taileron_right_value;
-    float _rudder_value;
+    // curent values for steering:
+    float _throttle_value;  // 0-100%
+    float _taileron_left_value;  // -90, 90 deg
+    float _taileron_right_value;  // -90, 90 deg
+    float _rudder_value;   // -90, 90 deg
 
+    // control flags
     bool _invert_taileron_left;
     bool _invert_taileron_right;
     bool _control_rudder;
@@ -552,16 +554,24 @@ void loop() {
     Imu->calibrate(100);
 
     Aircraft aircraft(Imu);
-    aircraft.setup(1, 1, 1, 1);
-    aircraft.properties(1.3, 0.3, 15, 0.87);
+    aircraft.setup(
+        1,  // throttle gain 
+        1,  // roll gain
+        1,  // pitch gain
+        1  // yaw gain
+    );
+    aircraft.properties(
+        1.3, // mass, kg
+        0.3, // wing area, m2
+        15, // max thrust, N
+        0.87 // lift coefficient at 0deg angle of attack
+    );
 
     #ifdef AUTOPILOT
     Control *controller = new Autopilot();
     #else
     Control *controller = new RemoteControl();
     #endif // AUTOPILOT
-
-    uint64_t iter = 0;
     
     delay(1e3);
     while(1) {
@@ -576,9 +586,6 @@ void loop() {
         int dt = duration.count();
         if (dt < LOOP_PERIOD_US) {
             delayMicroseconds(LOOP_PERIOD_US - dt);
-        }
-        if (iter++ % 100 == 0) {
-            // print here some statistics
         }
     }
 }
