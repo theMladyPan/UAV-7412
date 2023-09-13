@@ -8,15 +8,13 @@
 #include "esp_log.h"
 #include <IBusBM.h>
 #include <ArduinoEigenDense.h>
+#include <iostream>
 
-using namespace Eigen;
 
 #ifdef TFT_DISPLAY
 #include <TFT_eSPI.h>
 TFT_eSPI tft = TFT_eSPI(135, 240);
 #endif // TFT_DISPLAY
-
-#define MOCKUP
 
 #define PIN_SERVO_TAILERON_L 33
 #define PIN_SERVO_TAILERON_R 26
@@ -58,6 +56,25 @@ float rnd(float min = -1, float max = 1) {
     return min + static_cast <float> (rand()) /( static_cast <float> (RAND_MAX/(max-min)));
 }
 
+
+void calculateRotationMatrix(
+        const Eigen::Vector3f& v, 
+        const Eigen::Vector3f& w, 
+        Eigen::Matrix3f& R) {
+    Eigen::Vector3f u = v.cross(w);
+    u = u.normalized();
+    
+    float cos_theta = v.normalized().dot(w.normalized());
+    float sin_theta = std::sqrt(1 - cos_theta * cos_theta);
+
+    R = Eigen::Matrix3f::Identity() * cos_theta +
+        (1 - cos_theta) * u * u.transpose() +
+        sin_theta * (Eigen::Matrix3f() << 0, -u(2), u(1),
+                                        u(2), 0, -u(0),
+                                        -u(1), u(0), 0).finished();
+}
+
+
 class IServo {
 public:
     IServo() { }
@@ -75,13 +92,13 @@ private:
 
 class VectorOperations {
 public:
-    static void axes_to_vector(std::array<float, 3> &vec, float ax, float ay, float az) {
+    static void axes_to_vector(Eigen::Vector3f &vec, float ax, float ay, float az) {
         vec[0] = ax;
         vec[1] = ay;
         vec[2] = az;
     }
 
-    static float get_vector_length(std::array<float, 3> &vec) {
+    static float get_vector_length(Eigen::Vector3f &vec) {
         return sqrt(vec[0] * vec[0] + vec[1] * vec[1] + vec[2] * vec[2]);
     }
 };
@@ -89,11 +106,12 @@ public:
 
 class BaseIMU { 
 protected:
-    Eigen::Matrix3f _base_rotation;
-    std::array<float, 3> _gyro_null_val;
+    Eigen::Matrix3f _base_rotation = Eigen::Matrix3f::Identity();
+    Eigen::Vector3f _gyro_null_val;
+    float _acc_gain = 1;
 public:
-    virtual void get_rotations(std::array<float, 3> &rotations) = 0;
-    virtual void get_accelerations(std::array<float, 3> &accelerations) = 0;
+    virtual void get_rotations_dps(Eigen::Vector3f &rotations) = 0;
+    virtual void get_accelerations_g(Eigen::Vector3f &accelerations) = 0;
     virtual void calibrate(uint n_samples) = 0;
 };
 
@@ -108,10 +126,12 @@ public:
         ESP_LOGI("IMU", "Device ID: %d", dev_id);
 
         // Set the accelerometer range to 250 degrees/second
-        ESP_LOGD("IMU", "Setting accelerometer range ...");
+        ESP_LOGD("IMU", "Setting gyro range ...");
         this->setFullScaleGyroRange(BMI160_GYRO_RANGE_1000);
-        ESP_LOGD("IMU", "Setting accelerometer range done.");
+        ESP_LOGD("IMU", "Setting gyro range done.");
         this->setFullScaleAccelRange(BMI160_ACCEL_RANGE_2G);
+        ESP_LOGD("IMU", "Setting accelerometer range done.");
+        delay(100);
     }
 
     /**
@@ -136,7 +156,7 @@ public:
         return a;
     }
 
-    void get_rotations(std::array<float, 3> &rotations) {
+    void get_rotations_dps(Eigen::Vector3f &rotations) {
         int gxRaw, gyRaw, gzRaw;         // raw gyro values
         this->readGyro(gxRaw, gyRaw, gzRaw);
         rotations[0] = convert_raw_gyro(gxRaw) - _gyro_null_val[0]; 
@@ -144,25 +164,81 @@ public:
         rotations[2] = convert_raw_gyro(gzRaw) - _gyro_null_val[2]; 
     }
 
-    void get_accelerations(std::array<float, 3> &accelerations) {
+    void get_accelerations_g(Eigen::Vector3f &accelerations) {
         int axRaw, ayRaw, azRaw;         // raw gyro values
         this->readAccelerometer(axRaw, ayRaw, azRaw);
-        accelerations[0] = convert_raw_accel(axRaw);
-        accelerations[1] = convert_raw_accel(ayRaw);
-        accelerations[2] = convert_raw_accel(azRaw);
+        accelerations[0] = convert_raw_accel(axRaw) * _acc_gain;
+        accelerations[1] = convert_raw_accel(ayRaw) * _acc_gain;
+        accelerations[2] = convert_raw_accel(azRaw) * _acc_gain;
+        accelerations = _base_rotation * accelerations;
     }
 
     void calibrate(uint n_samples) {
-        // TODO
+        ESP_LOGI("IMU", "Calibrating Gyro ...");
+        std::array<int, 3> gyro_vals;
+        std::array<int64_t, 3> gyro_sums = {0, 0, 0};
+        for(uint i = 0; i < n_samples; i++) {
+            readGyro(gyro_vals[0], gyro_vals[1], gyro_vals[2]);
+            gyro_sums[0] += gyro_vals[0];
+            gyro_sums[1] += gyro_vals[1];
+            gyro_sums[2] += gyro_vals[2];
+            delay(1);
+        }
+        _gyro_null_val[0] = convert_raw_gyro(gyro_sums[0] / n_samples);
+        _gyro_null_val[1] = convert_raw_gyro(gyro_sums[1] / n_samples);
+        _gyro_null_val[2] = convert_raw_gyro(gyro_sums[2] / n_samples);
+        
+        ESP_LOGI("IMU", "Calibrating Gyro done.");
+        ESP_LOGD("IMU", "Gyro null values: %f, %f, %f", _gyro_null_val[0], _gyro_null_val[1], _gyro_null_val[2]);
+
+        ESP_LOGI("IMU", "Calibrating Accelerometer ...");
+        std::array<int, 3> acc_vals;
+        std::array<int64_t, 3> acc_sums = {0, 0, 0};
+        for(uint i = 0; i < n_samples; i++) {
+            readAccelerometer(acc_vals[0], acc_vals[1], acc_vals[2]);
+            acc_sums[0] += acc_vals[0];
+            acc_sums[1] += acc_vals[1];
+            acc_sums[2] += acc_vals[2];
+            delay(1);
+        }
+        for(uint i = 0; i < 3; i++) {
+            acc_sums[i] /= n_samples;
+        }
+        Eigen::Vector3f acc_vec (
+            convert_raw_accel(acc_sums[0]), 
+            convert_raw_accel(acc_sums[1]), 
+            convert_raw_accel(acc_sums[2])
+        );
+        ESP_LOGI("IMU", "Calibrating Accelerometer done.");
+        ESP_LOGD("IMU", "Accelerometer null values: %f, %f, %f", acc_vec[0], acc_vec[1], acc_vec[2]);
+        /*
+        // maybe we dont need the gain
+        VectorOperations::get_vector_length(acc_vec);
+        _acc_gain = 1 / VectorOperations::get_vector_length(acc_vec);
+        ESP_LOGD("IMU", "Accelerometer gain: %f", _acc_gain);
+        */
+
+        // calculate rotation matrix to shift accelerometer values to base frame
+        Eigen::Vector3f base_vec(0, 0, 1);  // base vector is z-axis
+        Eigen::Matrix3f R;
+        calculateRotationMatrix(acc_vec, base_vec, R);
+        ESP_LOGD("IMU", "Rotation matrix:\n%f, %f, %f\n%f, %f, %f\n%f, %f, %f", 
+            R(0, 0), R(0, 1), R(0, 2),
+            R(1, 0), R(1, 1), R(1, 2),
+            R(2, 0), R(2, 1), R(2, 2));
+
+        _base_rotation = R;
+        get_accelerations_g(acc_vec);
+        ESP_LOGD("IMU", "Accelerometer after calibration: %f, %f, %f", acc_vec[0], acc_vec[1], acc_vec[2]);
     }
 };
 
 class MockupIMU: public BaseIMU {
 private:
-    std::array<float, 3> _rotations = {0, 0, 0};
-    std::array<float, 3> _accelerations = {0, 0, 0};
+    Eigen::Vector3f _rotations = {0, 0, 0};
+    Eigen::Vector3f _accelerations = {0, 0, 0};
 public:
-    void get_rotations(std::array<float, 3> &rotations) {
+    void get_rotations_dps(Eigen::Vector3f &rotations) {
         // get some random values in range (-10, 10) and add to the base values,
         rotations[0] = _rotations[0] + rnd();
         rotations[1] = _rotations[1] + rnd();
@@ -172,7 +248,7 @@ public:
         
     }
 
-    void get_accelerations(std::array<float, 3> &accelerations) {
+    void get_accelerations_g(Eigen::Vector3f &accelerations) {
         // do the same for accelerations
         accelerations[0] = _accelerations[0] + rnd() / 10.0;
         accelerations[1] = _accelerations[1] + rnd() / 10.0;
@@ -186,43 +262,13 @@ public:
 };
 
 
-class Orientation {
-private:
-    std::array<float, 3> _orientation;
-public:
-    Orientation() { 
-        _orientation[0] = 0;
-        _orientation[1] = 0;
-        _orientation[2] = 0;
-    } 
-    void set_roll(float roll) {
-        _orientation[0] = roll;
-    }   
-    void set_pitch(float pitch) {
-        _orientation[1] = pitch;
-    }
-    void set_yaw(float yaw) {
-        _orientation[2] = yaw;
-    }
-    float get_roll() {
-        return _orientation[0];
-    }
-    float get_pitch() {
-        return _orientation[1];
-    }
-    float get_yaw() {
-        return _orientation[2];
-    }
-};
-
-
 class Control {
 protected:
-    std::array<float, 3> _desired_orientation;
+    Eigen::Vector3f _desired_orientation;
     float _desired_throttle;
 public:
     void get_desired_orientation(
-            std::array<float, 3> &desired_orientation, 
+            Eigen::Vector3f &desired_orientation, 
             float desired_throttle) {
         std::copy(
             _desired_orientation.begin(), 
@@ -258,7 +304,7 @@ public:
 
 class Autopilot : public Control {
 private:
-    std::array<float, 3> _desired_orientation;
+    Eigen::Vector3f _desired_orientation;
 public:
     Autopilot() { }
 
@@ -273,9 +319,9 @@ public:
 
 class Aircraft {
 private:
-    std::array<float, 3> _gyro_vals;
-    std::array<float, 3> _acc_vals;
-    std::array<float, 3> _desired_orientation;
+    Eigen::Vector3f _gyro_vals;
+    Eigen::Vector3f _acc_vals;
+    Eigen::Vector3f _desired_orientation;
     float _desired_throttle;
 
     BaseIMU *_imu;
@@ -360,10 +406,7 @@ public:
     }
 
     void calculate_corrections(Control *controller) {
-        // calculate corrections read data from IMU first
-        read_imu();
         compensate_thrust();
-
         // calculate corrections
         controller->get_desired_orientation(_desired_orientation, _desired_throttle);
         calculate_roll_correction(_desired_orientation[0]);
@@ -390,11 +433,11 @@ public:
         set_throttle();
     }
 
-    void read_imu() {
+    void update() {
         // read raw gyro measurements from device
-        _imu->get_rotations(_gyro_vals);
+        _imu->get_rotations_dps(_gyro_vals);
         // read raw accelerometer measurements from device
-        _imu->get_accelerations(_acc_vals);
+        _imu->get_accelerations_g(_acc_vals);
         ESP_LOGD("Aircraft", "Gyro: %f, %f, %f", _gyro_vals[0], _gyro_vals[1], _gyro_vals[2]);
         ESP_LOGD("Aircraft", "Acc: %f, %f, %f", _acc_vals[0], _acc_vals[1], _acc_vals[2]);
     }
@@ -456,7 +499,34 @@ public:
         _servo_rudder.set_angle(_rudder_value);
         ESP_LOGD("Aircraft", "Set rudder to %f", _rudder_value);
     }
-};
+}; 
+
+
+int main() {
+    Eigen::Vector3f v(1.0, 2.0, 3.0);
+    Eigen::Vector3f w(0.0, 0.0, 1.0);
+
+    v = v.normalized();
+    w = w.normalized();
+
+    Eigen::Matrix3f R;
+    calculateRotationMatrix(v, w, R);
+
+    std::cout << "Rotation matrix:\n" << R << std::endl;
+
+    Eigen::Vector3f u = R * v;
+
+    std::cout << "Test - u:\n" << u << std::endl;
+
+    Eigen::Vector3f v1(1.0, 0, 0);
+    calculateRotationMatrix(v1, w, R);
+    std::cout << "Rotation matrix:\n" << R << std::endl;
+    u = R * v1;
+    std::cout << "Test - u:\n" << u << std::endl;
+    delay(1e6);
+
+    return 0;
+}
 
 
 void setup() {
@@ -471,8 +541,6 @@ void setup() {
     #endif // TFT_DISPLAY
 
 	ESP32_ISR_Servos.useTimer(0);
-
-    ESP_LOGI("main", "Starting BMI160");
 }
 
 void loop() {
@@ -481,6 +549,7 @@ void loop() {
     #else
     IMU *Imu = new IMU();    
     #endif // MOCKUP
+    Imu->calibrate(100);
 
     Aircraft aircraft(Imu);
     aircraft.setup(1, 1, 1, 1);
@@ -493,10 +562,12 @@ void loop() {
     #endif // AUTOPILOT
 
     uint64_t iter = 0;
-
+    
+    delay(1e3);
     while(1) {
         auto start = std::chrono::high_resolution_clock::now();
 
+        aircraft.update();
         aircraft.calculate_corrections(controller);
         aircraft.steer();
 
