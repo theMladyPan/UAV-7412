@@ -331,11 +331,11 @@ public:
     }
 
     void calculate_roll_correction(float desired_roll) {
-        _roll_corr = 0;  // TODO
+        _roll_corr = 0;  // TODO Sem treba aj PID
     }
 
     void calculate_pitch_correction(float desired_pitch) {
-        _pitch_corr = 0;  // TODO
+        _pitch_corr = 0;  // TODO Sem treba aj PID
     }
 
     void calculate_yaw_correction(float desired_yaw) {
@@ -444,9 +444,9 @@ void loop() {
     aircraft.setup(1, 1, 1, 1);
 
     #ifdef AUTOPILOT
-    Control *controler = new Autopilot();
+    Control *controller = new Autopilot();
     #else
-    Control *controler = new RemoteControl();
+    Control *controller = new RemoteControl();
     #endif // AUTOPILOT
 
     uint64_t iter = 0;
@@ -454,7 +454,7 @@ void loop() {
     while(1) {
         auto start = std::chrono::high_resolution_clock::now();
 
-        aircraft.calculate_corrections(controler);
+        aircraft.calculate_corrections(controller);
         aircraft.steer();
 
         auto end = std::chrono::high_resolution_clock::now();
