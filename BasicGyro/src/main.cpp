@@ -268,8 +268,7 @@ protected:
     float _desired_throttle;
 public:
     void get_desired_orientation(
-            Eigen::Vector3f &desired_orientation, 
-            float desired_throttle) {
+            Eigen::Vector3f &desired_orientation) {
         std::copy(
             _desired_orientation.begin(), 
             _desired_orientation.end(), 
@@ -361,10 +360,10 @@ private:
     float _lift_coefficient;
 
     void compensate_thrust() {
-        // assume linear thrust curve for now
-        float current_thrust = _throttle_value * _max_thrust;
-        // compensate for thrust:
-        _acc_vals[0] -= current_thrust;
+        // calculate length of acceleration vector
+        float vgt = VectorOperations::get_vector_length(_acc_vals);
+        // thrust is always in X direction
+        float xt = sqrt(vgt * vgt - 1);
     }
     
 public:
@@ -408,9 +407,12 @@ public:
     }
 
     void calculate_corrections(Control *controller) {
-        compensate_thrust();
+        // compensate_thrust();  // not working yet
+
         // calculate corrections
-        controller->get_desired_orientation(_desired_orientation, _desired_throttle);
+        controller->get_desired_orientation(_desired_orientation);
+        controller->get_desired_throttle(_desired_throttle);
+
         calculate_roll_correction(_desired_orientation[0]);
         calculate_pitch_correction(_desired_orientation[1]);
         calculate_yaw_correction(_desired_orientation[2]);
@@ -468,6 +470,9 @@ public:
     void set_taileron_right(float angle) {
         // set angle of right taileron
         // TODO covert angle from range -90, 90 if necessary
+        if (_invert_taileron_right) {
+            angle = -angle;
+        }
         _servo_taileron_l.set_angle(angle);
         ESP_LOGD("Aircraft", "Set taileron right to %f", angle);
     }
@@ -502,33 +507,6 @@ public:
         ESP_LOGD("Aircraft", "Set rudder to %f", _rudder_value);
     }
 }; 
-
-
-int main() {
-    Eigen::Vector3f v(1.0, 2.0, 3.0);
-    Eigen::Vector3f w(0.0, 0.0, 1.0);
-
-    v = v.normalized();
-    w = w.normalized();
-
-    Eigen::Matrix3f R;
-    calculateRotationMatrix(v, w, R);
-
-    std::cout << "Rotation matrix:\n" << R << std::endl;
-
-    Eigen::Vector3f u = R * v;
-
-    std::cout << "Test - u:\n" << u << std::endl;
-
-    Eigen::Vector3f v1(1.0, 0, 0);
-    calculateRotationMatrix(v1, w, R);
-    std::cout << "Rotation matrix:\n" << R << std::endl;
-    u = R * v1;
-    std::cout << "Test - u:\n" << u << std::endl;
-    delay(1e6);
-
-    return 0;
-}
 
 
 void setup() {
