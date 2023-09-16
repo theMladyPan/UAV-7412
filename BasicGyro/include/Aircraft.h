@@ -86,11 +86,15 @@ public:
     }
 
     void calculate_roll_correction(float desired_roll) {
-        _roll_corr = 0;  // TODO Sem treba aj PID
+        float current_roll = asin(_acc_vals[1]) * 180 / M_PI;
+        _roll_corr = desired_roll - current_roll;
+        // TODO: add PID regulation
     }
 
     void calculate_pitch_correction(float desired_pitch) {
-        _pitch_corr = 0;  // TODO Sem treba aj PID
+        float current_pitch = asin(_acc_vals[0]) * 180 / M_PI;
+        _pitch_corr = desired_pitch - current_pitch;
+        // TODO: add PID regulation
     }
 
     void calculate_yaw_correction(float desired_yaw) {

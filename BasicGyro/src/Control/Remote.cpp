@@ -17,13 +17,10 @@ float Remote::pulse_width_to_angle(uint16_t pulse_width) {
     // 1500us = 0°
     // 2500us = 90°
     // TODO: measure if this is correct
-    return -90 + ((pulse_width - 600) * 180 / 1000);
+    return map(pulse_width, 500, 2500, -90, 90);
 }
 
 float Remote::pulse_width_to_throttle(uint16_t pulse_width) {
-    // 500us = 0
-    // 1500us = 0.5
-    // 2500us = 1
     // TODO: measure if this is correct
-    return (pulse_width - 500) / 2000.0;
+    return map(pulse_width, 500, 2500, 0, 100);
 }

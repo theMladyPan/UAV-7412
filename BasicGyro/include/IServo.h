@@ -25,7 +25,7 @@ public:
      * 
      * @param angle -90°, 90°
      */
-    void set_angle(int angle);
+    void set_angle(uint16_t angle);
 
 private:
     int8_t _servoIndex;
