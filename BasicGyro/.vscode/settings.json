@@ -55,6 +55,7 @@
         "complex": "cpp",
         "list": "cpp",
         "set": "cpp",
-        "thread": "cpp"
+        "thread": "cpp",
+        "core": "cpp"
     }
 }

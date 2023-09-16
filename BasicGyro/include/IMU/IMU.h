@@ -12,17 +12,17 @@ private:
      * @brief Read raw gyro values from device and convert to degrees per second
      * 
      * @param gRaw 
-     * @return float 
+     * @return double 
      */
-    float convert_raw_gyro(int gRaw);
+    double convert_raw_gyro(int gRaw);
 
     /**
      * @brief Read raw accelerometer values from device and convert to g
      * 
      * @param aRaw 
-     * @return float 
+     * @return double 
      */
-    float convert_raw_accel(int aRaw);
+    double convert_raw_accel(int aRaw);
     
 public:
     /**
@@ -36,14 +36,14 @@ public:
      * 
      * @param rotations vector (roll, pitch yaw)
      */
-    void get_rotations_dps(Eigen::Vector3f &rotations);
+    void get_rotations_dps(Eigen::Vector3d &rotations);
 
     /**
      * @brief Get the accelerations g vector (x, y, z)
      * 
      * @param accelerations vector (x, y, z)
      */
-    void get_accelerations_g(Eigen::Vector3f &accelerations);
+    void get_accelerations_g(Eigen::Vector3d &accelerations);
 
     void calibrate(uint n_samples);
 };

@@ -1,13 +1,13 @@
 #include "IMU/IMU.h"
 
 
-float IMU::convert_raw_gyro(int gRaw) {
-    float g = (gRaw * 1000.0) / 32768.0;
+double IMU::convert_raw_gyro(int gRaw) {
+    double g = (gRaw * 1000.0) / 32768.0;
     return g;
 }
 
-float IMU::convert_raw_accel(int aRaw) {
-    float a = (aRaw * 2.0) / 32768.0;
+double IMU::convert_raw_accel(int aRaw) {
+    double a = (aRaw * 2.0) / 32768.0;
     return a;
 }
 
@@ -28,7 +28,7 @@ IMU::IMU() {
     delay(100);
 }
 
-void IMU::get_rotations_dps(Eigen::Vector3f &rotations) {
+void IMU::get_rotations_dps(Eigen::Vector3d &rotations) {
     int gxRaw, gyRaw, gzRaw;         // raw gyro values
     this->readGyro(gxRaw, gyRaw, gzRaw);
     rotations[0] = convert_raw_gyro(gxRaw) - _gyro_null_val[0]; 
@@ -36,7 +36,7 @@ void IMU::get_rotations_dps(Eigen::Vector3f &rotations) {
     rotations[2] = convert_raw_gyro(gzRaw) - _gyro_null_val[2]; 
 }
 
-void IMU::get_accelerations_g(Eigen::Vector3f &accelerations) {
+void IMU::get_accelerations_g(Eigen::Vector3d &accelerations) {
     int axRaw, ayRaw, azRaw;         // raw gyro values
     this->readAccelerometer(axRaw, ayRaw, azRaw);
     accelerations[0] = convert_raw_accel(axRaw) * _acc_gain;
@@ -76,7 +76,7 @@ void IMU::calibrate(uint n_samples) {
     for(uint i = 0; i < 3; i++) {
         acc_sums[i] /= n_samples;
     }
-    Eigen::Vector3f acc_vec (
+    Eigen::Vector3d acc_vec (
         convert_raw_accel(acc_sums[0]), 
         convert_raw_accel(acc_sums[1]), 
         convert_raw_accel(acc_sums[2])
@@ -91,8 +91,8 @@ void IMU::calibrate(uint n_samples) {
     */
 
     // calculate rotation matrix to shift accelerometer values to base frame
-    Eigen::Vector3f base_vec(0, 0, 1);  // base vector is z-axis
-    Eigen::Matrix3f R;
+    Eigen::Vector3d base_vec(0, 0, 1);  // base vector is z-axis
+    Eigen::Matrix3d R;
     calculateRotationMatrix(acc_vec, base_vec, R);
     ESP_LOGD("IMU", "Rotation matrix:\n%f, %f, %f\n%f, %f, %f\n%f, %f, %f", 
         R(0, 0), R(0, 1), R(0, 2),

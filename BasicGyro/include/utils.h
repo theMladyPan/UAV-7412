@@ -9,9 +9,9 @@
 // The rotation matrix is the orthogonal matrix that satisfies
 // the equation Rv = w.
 void calculateRotationMatrix(
-        const Eigen::Vector3f& v, 
-        const Eigen::Vector3f& w, 
-        Eigen::Matrix3f& R);
+        const Eigen::Vector3d& v, 
+        const Eigen::Vector3d& w, 
+        Eigen::Matrix3d& R);
 
 
 #endif // UTILS_H

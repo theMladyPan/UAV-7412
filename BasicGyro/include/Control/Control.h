@@ -8,11 +8,11 @@ protected:
     /**
      * @brief Desired orientation in degrees, roll, pitch, yaw
      */
-    Eigen::Vector3f _desired_orientation;
+    Eigen::Vector3d _desired_orientation;
     float _desired_throttle;
 public:
     void get_desired_orientation(
-            Eigen::Vector3f &desired_orientation);
+            Eigen::Vector3d &desired_orientation);
 
     void get_desired_throttle(float &desired_throttle);
 

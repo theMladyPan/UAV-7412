@@ -2,7 +2,7 @@
 
 
 void Control::get_desired_orientation(
-        Eigen::Vector3f &desired_orientation) {
+        Eigen::Vector3d &desired_orientation) {
     std::copy(
         _desired_orientation.begin(), 
         _desired_orientation.end(), 

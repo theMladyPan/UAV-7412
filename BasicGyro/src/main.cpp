@@ -1,6 +1,5 @@
 #include <Arduino.h>
 #include <ESP32_ISR_Servo.h>
-#include <PID_v1.h>
 #include <chrono>
 #include "esp_log.h"
 #include <iostream>
@@ -10,6 +9,7 @@
 #include "Control/Remote.h"
 #include "IMU/IMU.h"
 #include "IMU/MockupIMU.h"
+#include "Regulator/PID.h"
 
 
 #ifdef TFT_DISPLAY
@@ -25,30 +25,6 @@ TFT_eSPI tft = TFT_eSPI(135, 240);
 #define LOOP_FREQ_HZ 1
 #define LOOP_PERIOD_US (1000000 / LOOP_FREQ_HZ)
 
-double Kp=1, Ki=10, Kd=0;
-
-//Define Variables we'll be connecting to
-double angle_x_set, angle_x, corr_x;
-PID pid_roll(&angle_x, &corr_x, &angle_x_set, Kp, Ki, Kd, DIRECT);
-double angle_y_set, angle_y, corr_y;
-PID pid_pitch(&angle_y, &corr_y, &angle_y_set, Kp, Ki, Kd, DIRECT);
-double angle_z_set, angle_z, corr_z;
-PID pid_yaw(&angle_z, &corr_z, &angle_z_set, Kp, Ki, Kd, DIRECT);
-
-
-void setup_PIDs() {
-    //turn the PID on
-    pid_roll.SetMode(AUTOMATIC);
-    pid_roll.SetSampleTime(1);
-    pid_roll.SetOutputLimits(-90, 90);
-    pid_pitch.SetMode(AUTOMATIC);
-    pid_pitch.SetSampleTime(1);
-    pid_pitch.SetOutputLimits(-90, 90);
-    pid_yaw.SetMode(AUTOMATIC);
-    pid_yaw.SetSampleTime(1);
-    pid_yaw.SetOutputLimits(-90, 90);
-}
-
 
 void setup() {
     Serial.begin(1000000);
@@ -63,22 +39,31 @@ void setup() {
 }
 
 void loop() {
-    #ifdef MOCKUP
-    MockupIMU *Imu = new MockupIMU();
-    #else
-    IMU *Imu = new IMU();    
-    #endif // MOCKUP
+    // MockupIMU *Imu = new MockupIMU();
+    IMU *Imu = new IMU();
 
     // Calibrate the IMU as a part of the startup procedure
     Imu->calibrate(100);
 
+    PIDRegulator *regulator = new PIDRegulator();
+    pid_params_t pid_params = {
+        .Kp = 1,
+        .Ki = 10,
+        .Kd = 0,
+        .sample_time = 1  // ms
+    };
+    
+    regulator->setup(pid_params);
+
     // Setup the aircraft
-    aircraft_param_t params;
-    params.invert_taileron_left = true;
+    aircraft_param_t aircraft_params;
+    aircraft_params.invert_taileron_left = true;
+    aircraft_params.loop_period_us = LOOP_PERIOD_US;
 
     Aircraft aircraft(
         Imu,
-        params
+        regulator,
+        aircraft_params
     );
 
     aircraft.setup(
@@ -88,11 +73,8 @@ void loop() {
         PIN_THROTTLE
     );
 
-    #ifdef AUTOPILOT
-    Control *controller = new Autopilot();
-    #else
+    // Control *controller = new Autopilot();
     Control *controller = new Remote();
-    #endif // AUTOPILOT
     
     delay(1e3);
 
