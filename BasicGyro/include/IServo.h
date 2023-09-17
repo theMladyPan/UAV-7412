@@ -23,9 +23,11 @@ public:
     /**
      * @brief Set the angle in degrees
      * 
-     * @param angle -90°, 90°
+     * @param angle -90°, 90° -> 500, 2500us
      */
-    void set_angle(uint16_t angle);
+    void set_angle(float angle);
+
+    void set_percent(float percent);
 
 private:
     int8_t _servoIndex;
