@@ -163,8 +163,8 @@ void Aircraft::set_rudder() {
     // set rudder angle
     // TODO convert angle from range -90, 90 if necessary
     _rudder_value = _corrections[2];
+    ESP_LOGD("Aircraft", "Setting rudder to %f", _rudder_value);
     _servo_rudder.set_angle(_rudder_value);
-    ESP_LOGD("Aircraft", "Set rudder to %f", _rudder_value);
 }
 
 void Aircraft::pre_flight_check() {
