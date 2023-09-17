@@ -70,6 +70,8 @@ public:
 
     void calculate_yaw_correction(float desired_yaw);
 
+    void calculate_throttle_correction(float desired_throttle);
+
     void steer();
 
     void update();

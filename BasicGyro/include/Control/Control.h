@@ -17,6 +17,10 @@ public:
     void get_desired_throttle(float &desired_throttle);
 
     virtual void update() = 0;
+
+    virtual float get_switch() = 0;
+
+    virtual float get_potentiometer() = 0;
 };
 
 

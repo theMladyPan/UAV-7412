@@ -11,14 +11,17 @@ void PIDRegulator::setup(pid_params_t &params) {
     _pid_roll->SetTunings(params.Kp, params.Ki, params.Kd);
     _pid_roll->SetOutputLimits(-90, 90);
     _pid_roll->SetSampleTime(params.sample_time);
+    _pid_roll->SetMode(MANUAL); // TODO: use AUTOMATIC  
 
     _pid_pitch->SetTunings(params.Kp, params.Ki, params.Kd);
     _pid_pitch->SetOutputLimits(-90, 90);
     _pid_pitch->SetSampleTime(params.sample_time);
+    _pid_pitch->SetMode(MANUAL); // TODO:   
 
     _pid_yaw->SetTunings(params.Kp, params.Ki, params.Kd);
     _pid_yaw->SetOutputLimits(-90, 90);
     _pid_yaw->SetSampleTime(params.sample_time);
+    _pid_yaw->SetMode(MANUAL); // TODO: 
 }
 
 void PIDRegulator::update() {

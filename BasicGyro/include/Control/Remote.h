@@ -8,6 +8,9 @@
 
 class Remote : public Control {
 private:
+    float _svc;
+    float _vrb;
+
     IBusBM _ibus;
     /**
      * @brief Convert pulse width to angle
@@ -28,6 +31,12 @@ public:
     Remote();
 
     void update();
+
+    // SVC:1 = 0, SVC:2 = 50, SVC:3 = 100
+    float get_switch();
+
+    // VRB = 0 to 100
+    float get_potentiometer();
 };
 
 

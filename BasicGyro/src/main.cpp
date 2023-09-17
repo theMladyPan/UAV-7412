@@ -43,8 +43,10 @@ void loop() {
     IMU *Imu = new IMU();
 
     // Calibrate the IMU as a part of the startup procedure
+    ESP_LOGI("main", "Calibrating IMU");
     Imu->calibrate(100);
 
+    ESP_LOGI("main", "Starting Regulator");
     PIDRegulator *regulator = new PIDRegulator();
     pid_params_t pid_params = {
         .Kp = 1,
@@ -52,20 +54,24 @@ void loop() {
         .Kd = 0,
         .sample_time = 1  // ms
     };
-    
+    ESP_LOGI("main", "Setting up regulator");
     regulator->setup(pid_params);
 
     // Setup the aircraft
     aircraft_param_t aircraft_params;
     aircraft_params.invert_taileron_left = true;
+    aircraft_params.control_rudder = true;
+    aircraft_params.control_throttle = true;
     aircraft_params.loop_period_us = LOOP_PERIOD_US;
 
+    ESP_LOGI("main", "Creating aircraft");
     Aircraft aircraft(
         Imu,
         regulator,
         aircraft_params
     );
 
+    ESP_LOGI("main", "Setting up aircraft");
     aircraft.setup(
         PIN_SERVO_TAILERON_L,
         PIN_SERVO_TAILERON_R,
@@ -74,10 +80,12 @@ void loop() {
     );
 
     // Control *controller = new Autopilot();
+    ESP_LOGI("main", "Creating controller");
     Control *controller = new Remote();
     
     delay(1e3);
-
+    
+    ESP_LOGI("main", "Initiating pre-flight check");
     aircraft.pre_flight_check();
     delay(1e3);
 
