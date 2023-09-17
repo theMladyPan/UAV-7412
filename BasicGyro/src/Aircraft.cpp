@@ -117,6 +117,12 @@ void Aircraft::set_taileron_left(float angle) {
     if (_params.invert_taileron_left) {
         angle = -angle;
     }
+    //clamp angle to -45, 45
+    if (angle > 45) {
+        angle = 45;
+    } else if (angle < -45) {
+        angle = -45;
+    }
     ESP_LOGD("Aircraft", "Setting taileron left to %f", angle);
     _servo_taileron_l.set_angle(angle);
 }
@@ -125,6 +131,12 @@ void Aircraft::set_taileron_right(float angle) {
     // set angle of right taileron
     if (_params.invert_taileron_right) {
         angle = -angle;
+    }
+    //clamp angle to -45, 45
+    if (angle > 45) {
+        angle = 45;
+    } else if (angle < -45) {
+        angle = -45;
     }
     ESP_LOGD("Aircraft", "Setting taileron right to %f", angle);
     _servo_taileron_r.set_angle(angle);
