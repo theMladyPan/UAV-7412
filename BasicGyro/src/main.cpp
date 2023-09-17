@@ -59,7 +59,7 @@ void loop() {
 
     // Setup the aircraft
     aircraft_param_t aircraft_params;
-    aircraft_params.invert_taileron_left = true;
+    aircraft_params.invert_taileron_right = true;
     aircraft_params.control_rudder = true;
     aircraft_params.control_throttle = true;
     aircraft_params.loop_period_us = LOOP_PERIOD_US;
