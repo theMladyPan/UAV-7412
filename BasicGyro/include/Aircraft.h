@@ -5,7 +5,7 @@
 #include "IServo.h"
 #include "IMU/BaseIMU.h"
 #include "Control/Control.h"
-#include "Regulator/Regulator.h"
+#include "Regulator/RegulatorBase.h"
 
 typedef struct
 {
@@ -17,9 +17,12 @@ typedef struct
     bool control_rudder = false;
     bool control_throttle = false;
     uint32_t loop_period_us;
+    float angle_min;
+    float angle_max;
 } aircraft_param_t;
 
 
+template <typename T>
 class Aircraft {
 private:
     Eigen::Vector3d _gyro_vals;
@@ -30,7 +33,7 @@ private:
     aircraft_param_t _params;
 
     BaseIMU *_imu;
-    Regulator *_regulator;
+    T* _regulator;
     IServo _servo_taileron_l;
     IServo _servo_taileron_r;
     IServo _servo_rudder;
@@ -52,7 +55,6 @@ private:
 public:
     Aircraft(
         BaseIMU *imu, 
-        Regulator *regulator,
         aircraft_param_t &params) ;
 
     void setup(
@@ -122,7 +124,13 @@ public:
      * @endcode
      */
     void pre_flight_check();
+
+    void setup_regulator(void* params);
+
+    void print_status();
 }; 
 
+
+#include "Aircraft.tpp"
 
 #endif // AIRCRAFT_H

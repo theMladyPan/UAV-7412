@@ -1,31 +1,47 @@
 #include "Regulator/PID.h"
+#include "esp_log.h"
 
 
-PIDRegulator::PIDRegulator() {
-    _pid_roll = new PID(&_feedback->x(), &_correction->x(), &_setpoint->x(), 0, 0, 0, DIRECT);
-    _pid_pitch = new PID(&_feedback->y(), &_correction->y(), &_setpoint->y(), 0, 0, 0, DIRECT);
-    _pid_yaw = new PID(&_feedback->z(), &_correction->z(), &_setpoint->z(), 0, 0, 0, DIRECT);
+PID::PID() {
+    _params.kp = 1;
+    _params.ki = 0;
+    _params.kd = 0;
+    _params.sampling_period = 1;
+    _last_error = 0;
+    _integral = 0;
 }
 
-void PIDRegulator::setup(pid_params_t &params) {
-    _pid_roll->SetTunings(params.Kp, params.Ki, params.Kd);
-    _pid_roll->SetOutputLimits(-90, 90);
-    _pid_roll->SetSampleTime(params.sample_time);
-    _pid_roll->SetMode(MANUAL); // TODO: use AUTOMATIC  
-
-    _pid_pitch->SetTunings(params.Kp, params.Ki, params.Kd);
-    _pid_pitch->SetOutputLimits(-90, 90);
-    _pid_pitch->SetSampleTime(params.sample_time);
-    _pid_pitch->SetMode(MANUAL); // TODO:   
-
-    _pid_yaw->SetTunings(params.Kp, params.Ki, params.Kd);
-    _pid_yaw->SetOutputLimits(-90, 90);
-    _pid_yaw->SetSampleTime(params.sample_time);
-    _pid_yaw->SetMode(MANUAL); // TODO: 
+PID::PID(pid_params_t params) {
+    _params = params;
+    _last_error = 0;
 }
 
-void PIDRegulator::update() {
-    _pid_roll->Compute();
-    _pid_pitch->Compute();
-    _pid_yaw->Compute();
+double PID::correction(double feedback, double setpoint) {
+    double error = setpoint - feedback;
+    _integral += error * _params.sampling_period;
+    double p = _params.kp * error;
+    double i = _params.ki * _integral;
+    double d = _params.kd * (error - _last_error) / _params.sampling_period;
+    _last_error = error;
+    double correction = p + i + d;
+    ESP_LOGD("PID", "P: %f, I: %f, D: %f", p, i, d);
+
+    double overshoot = correction - _max;
+    double undershoot = correction - _min;
+    if (overshoot > 0) {
+        _integral -= overshoot;
+        correction = _max;
+    } else if (undershoot < 0) {
+        _integral -= undershoot;
+        correction = _min;
+    }
+
+    ESP_LOGD("PID", "Correction: %f", correction);
+    return correction;
 }
+
+void PID::set_limits(double min, double max) {
+    _min = min;
+    _max = max;
+}
+

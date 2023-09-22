@@ -1,27 +1,29 @@
 #pragma once
 
-#include "Regulator/Regulator.h"
-#include <PID_v1.h>
+#include <stdint.h>
 
 typedef struct {
-    double Kp;
-    double Ki;
-    double Kd;
-    uint16_t sample_time;
+    double kp;  // proportional gain
+    double ki;  // integral gain
+    double kd;  // derivative gain
+    double sampling_period;  // seconds
 } pid_params_t;
 
 
-class PIDRegulator : public Regulator {
+class PID {
 private:
-    PID* _pid_roll;
-    PID* _pid_pitch;
-    PID* _pid_yaw;
+    pid_params_t _params;
+    double _last_error;
+    double _min;
+    double _max;
+    double _integral;
 
 public: 
-    PIDRegulator();    
+    PID();
 
-    void setup(pid_params_t &params);
+    PID(pid_params_t params);
 
-    void update();
+    void set_limits(double min, double max);
 
+    double correction(double feedback, double setpoint);
 };

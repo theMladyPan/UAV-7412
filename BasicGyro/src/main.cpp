@@ -9,7 +9,7 @@
 #include "Control/Remote.h"
 #include "IMU/IMU.h"
 #include "IMU/MockupIMU.h"
-#include "Regulator/PID.h"
+#include "Regulator/PIDRegulator.h"
 
 
 #ifdef TFT_DISPLAY
@@ -22,8 +22,8 @@ TFT_eSPI tft = TFT_eSPI(135, 240);
 #define PIN_SERVO_RUDDER 25
 #define PIN_THROTTLE 32
 
-#define LOOP_FREQ_HZ 1
-#define LOOP_PERIOD_US (1000000 / LOOP_FREQ_HZ)
+#define LOOP_FREQ_HZ 100.0
+#define LOOP_PERIOD_US (1e6 / LOOP_FREQ_HZ)
 
 
 void setup() {
@@ -46,16 +46,13 @@ void loop() {
     ESP_LOGI("main", "Calibrating IMU");
     Imu->calibrate(100);
 
-    ESP_LOGI("main", "Starting Regulator");
-    PIDRegulator *regulator = new PIDRegulator();
     pid_params_t pid_params = {
-        .Kp = 1,
-        .Ki = 10,
-        .Kd = 0,
-        .sample_time = 1  // ms
+        .kp = 2,
+        .ki = 2,
+        .kd = 0,
+        .sampling_period = LOOP_PERIOD_US / 1e6  // 1s
     };
-    ESP_LOGI("main", "Setting up regulator");
-    regulator->setup(pid_params);
+    
 
     // Setup the aircraft
     aircraft_param_t aircraft_params;
@@ -63,13 +60,15 @@ void loop() {
     aircraft_params.control_rudder = true;
     aircraft_params.control_throttle = true;
     aircraft_params.loop_period_us = LOOP_PERIOD_US;
+    aircraft_params.angle_min = -45;
+    aircraft_params.angle_max = 45;
 
     ESP_LOGI("main", "Creating aircraft");
-    Aircraft aircraft(
+    Aircraft<PIDRegulator> aircraft(
         Imu,
-        regulator,
         aircraft_params
     );
+    aircraft.setup_regulator(&pid_params);
 
     ESP_LOGI("main", "Setting up aircraft");
     aircraft.setup(
@@ -86,9 +85,10 @@ void loop() {
     delay(1e3);
     
     ESP_LOGI("main", "Initiating pre-flight check");
-    aircraft.pre_flight_check();
+    // aircraft.pre_flight_check();  // Turn on after testing
     delay(1e3);
 
+    uint64_t loopn = 0;
     while(1) {
         auto start = std::chrono::high_resolution_clock::now();
 
@@ -99,6 +99,12 @@ void loop() {
         auto end = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
         int dt = duration.count();
+
+        if(loopn++ % 10 == 0) {
+            aircraft.print_status();
+            std::cout << "Loop duration: " << dt << " us" << std::endl << std::endl;
+        }
+            
         if (dt < LOOP_PERIOD_US) {
             delayMicroseconds(LOOP_PERIOD_US - dt);
         }
