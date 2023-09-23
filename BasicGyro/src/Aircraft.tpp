@@ -7,6 +7,7 @@
 template <class T>
 void Aircraft<T>::convert_acc_to_orientation() {
     // convert _acc_vals to roll, pitch
+    // FIXME: this is not working properly, nan values are returned for some reason
     _current_orientation[0] = asin(_acc_vals[1]) * 180 / M_PI;
     _current_orientation[1] = -asin(_acc_vals[0]) * 180 / M_PI;
     // yaw can be only obtained from GPS, aproximate from gyro:
