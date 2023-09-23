@@ -2,12 +2,12 @@
 #define ISERVO_H
 
 #include <stdint.h>
-#include "ESP32_New_ISR_Servo.hpp" 
 
-// static ESP32_ISR_Servo ServoImpl;
+#include "ESP32Servo.h"
+
 
 /**
- * @brief Servo class that uses ESP32_ISR_Servo library * 
+ * @brief Servo class 
  */
 class IServo {
 public:
@@ -30,7 +30,7 @@ public:
     void set_percent(float percent);
 
 private:
-    int8_t _servoIndex;
+    Servo ServoImpl;
 };
 
 #endif // ISERVO_H

@@ -24,7 +24,7 @@ void calculateRotationMatrix(
  * @param out_max The maximum value of the output range.
  * @return float The mapped value, or -1.0 if the input range is invalid (i.e., min == max).
  */
-float map(float x, float in_min, float in_max, float out_min, float out_max);
+float mapf(float x, float in_min, float in_max, float out_min, float out_max);
 
 
 #endif // UTILS_H

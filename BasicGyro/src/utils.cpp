@@ -18,7 +18,7 @@ void calculateRotationMatrix(
 }
 
 
-float map(float x, float in_min, float in_max, float out_min, float out_max) {
+float mapf(float x, float in_min, float in_max, float out_min, float out_max) {
     float run = in_max - in_min;
     if(run < 0.0f){
         ESP_LOGE("map", "Invalid input range: min > max");

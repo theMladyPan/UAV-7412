@@ -10,7 +10,7 @@ void Aircraft<T>::convert_acc_to_orientation() {
     _current_orientation[0] = asin(_acc_vals[1]) * 180 / M_PI;
     _current_orientation[1] = -asin(_acc_vals[0]) * 180 / M_PI;
     // yaw can be only obtained from GPS, aproximate from gyro:
-    _current_orientation[2] = _gyro_vals[2] * _params.loop_period_us / 1e6;
+    _current_orientation[2] = _gyro_vals[2] * _params.loop_period_us / 1e5;
 }
 
 

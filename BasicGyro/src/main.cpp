@@ -1,6 +1,5 @@
 #include <Arduino.h>
 #include <chrono>
-#include "ESP32_New_ISR_Servo.h"
 #include "esp_log.h"
 #include <iostream>
 #include "Aircraft.h"
@@ -23,7 +22,7 @@ TFT_eSPI tft = TFT_eSPI(135, 240);
 #define PIN_THROTTLE 26
 #define PIN_SERVO_RUDDER 27
 
-#define LOOP_FREQ_HZ 100.0
+#define LOOP_FREQ_HZ 200.0
 #define LOOP_PERIOD_US (1e6 / LOOP_FREQ_HZ)
 
 #define SERVO_ANGLE_MIN -45
@@ -106,7 +105,7 @@ void loop() {
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
         int dt = duration.count();
 
-        if(loopn++ % 10 == 0) {
+        if(loopn++ % 100 == 0) {
             aircraft.print_status();
             std::cout << "Loop duration: " << dt << " us" << std::endl << std::endl;
         }
