@@ -20,10 +20,7 @@ Aircraft<T>::Aircraft(
         aircraft_param_t &params) { 
     _imu = imu;
     _params = params;
-    ESP_LOGD("Aircraft", "Aircraft created, initializing regulator");
-    _regulator->set_setpoint(&_desired_orientation);
-    _regulator->set_correction(&_corrections);
-    _regulator->set_feedback(&_current_orientation);
+    ESP_LOGD("Aircraft", "Aircraft created");
 }
 
 
@@ -33,16 +30,17 @@ void Aircraft<T>::setup(
         int pin_servo_taileron_r,
         int pin_servo_rudder,
         int pin_throttle) {
-    ServoImpl.useTimer(0);
-    _servo_taileron_l = IServo(pin_servo_taileron_l);
-    _servo_taileron_r = IServo(pin_servo_taileron_r);
-    _servo_rudder = IServo(pin_servo_rudder);
-    _throttle = IServo(pin_throttle);
+    
+    _servo_taileron_l = new IServo(pin_servo_taileron_l);
+    _servo_taileron_r = new IServo(pin_servo_taileron_r);
+    _servo_rudder = new IServo(pin_servo_rudder);
+    _throttle = new IServo(pin_throttle);
 }
 
 
 template <class T>
 void Aircraft<T>::calculate_corrections(Control *controller) {
+    ESP_LOGI("Aircraft", "Calculating corrections");
     // calculate corrections
     controller->update();
     controller->get_desired_orientation(_desired_orientation);
@@ -62,6 +60,7 @@ void Aircraft<T>::calculate_corrections(Control *controller) {
     else {
         _throttle_corr = _desired_throttle;
     }
+    ESP_LOGI("Aircraft", "Corrections pre-calculated, updating regulator");
 
     _regulator->update();
 }
@@ -70,20 +69,18 @@ void Aircraft<T>::calculate_corrections(Control *controller) {
 template <class T>
 void Aircraft<T>::calculate_roll_correction(float desired_roll) {
     // Handled by regulator
-    // _corrections[0] = desired_roll - _current_orientation[0];
 }
 
 
 template <class T>
 void Aircraft<T>::calculate_pitch_correction(float desired_pitch) {
     // Handled by regulator
-    // _corrections[1] = desired_pitch - _current_orientation[1];
 }
 
 
 template <class T>
 void Aircraft<T>::calculate_yaw_correction(float desired_yaw) {
-    _corrections[2] = desired_yaw - _gyro_vals[2];
+    // Handled by regulator
 }
 
 
@@ -96,6 +93,7 @@ void Aircraft<T>::calculate_throttle_correction(float desired_throttle) {
 
 template <class T>
 void Aircraft<T>::steer() {
+    ESP_LOGI("Aircraft", "Steering aircraft");
     // steer the aircraft
     set_tailerons();
     set_rudder();
@@ -105,6 +103,7 @@ void Aircraft<T>::steer() {
 
 template <class T>
 void Aircraft<T>::update() {
+    ESP_LOGI("Aircraft", "Updating aircraft position");
     // read raw gyro measurements from device
     _imu->get_rotations_dps(_gyro_vals);
     // read raw accelerometer measurements from device
@@ -124,14 +123,16 @@ void Aircraft<T>::set_taileron_left(float angle) {
     if (_params.invert_taileron_left) {
         angle = -angle;
     }
+    /*
     //clamp angle to -45, 45
     if (angle > 45) {
         angle = 45;
     } else if (angle < -45) {
         angle = -45;
     }
+    */
     ESP_LOGD("Aircraft", "Setting taileron left to %f", angle);
-    _servo_taileron_l.set_angle(angle);
+    _servo_taileron_l->set_angle(angle);
 }
 
 
@@ -141,14 +142,16 @@ void Aircraft<T>::set_taileron_right(float angle) {
     if (_params.invert_taileron_right) {
         angle = -angle;
     }
+    /*
     //clamp angle to -45, 45
     if (angle > 45) {
         angle = 45;
     } else if (angle < -45) {
         angle = -45;
     }
+    */
     ESP_LOGD("Aircraft", "Setting taileron right to %f", angle);
-    _servo_taileron_r.set_angle(angle);
+    _servo_taileron_r->set_angle(angle);
 }
 
 
@@ -156,7 +159,7 @@ template <class T>
 void Aircraft<T>::set_throttle() {
     // set throttle
     ESP_LOGD("Aircraft", "Setting throttle to %f", _throttle_corr);
-    _throttle.set_percent(_throttle_corr);
+    _throttle->set_percent(_throttle_corr);
 }
 
 
@@ -176,10 +179,9 @@ void Aircraft<T>::set_tailerons() {
 template <class T>
 void Aircraft<T>::set_rudder() {
     // set rudder angle
-    // TODO convert angle from range -90, 90 if necessary
     _rudder_value = _corrections[2];
     ESP_LOGD("Aircraft", "Setting rudder to %f", _rudder_value);
-    _servo_rudder.set_angle(_rudder_value);
+    _servo_rudder->set_angle(_rudder_value);
 }
 
 
@@ -257,6 +259,7 @@ void Aircraft<T>::pre_flight_check() {
 
 template <class T>
 void Aircraft<T>::setup_regulator(void *params) {
+    ESP_LOGI("Aircraft", "Setting up regulator");
     _regulator = new T(&_current_orientation, &_desired_orientation, &_corrections);
     _regulator->setup(params, _params.angle_min, _params.angle_max);
 }
@@ -264,11 +267,9 @@ void Aircraft<T>::setup_regulator(void *params) {
 
 template <class T>
 void Aircraft<T>::print_status() {
-
     std::cout << "Current orientation: " << _current_orientation.transpose() << std::endl;
     std::cout << "Desired orientation: " << _desired_orientation.transpose() << std::endl;
     std::cout << "Desired throttle: " << _desired_throttle << std::endl;
     std::cout << "Corrections: " << _corrections.transpose() << std::endl;
     std::cout << "Throttle correction: " << _throttle_corr << std::endl;
-
 }

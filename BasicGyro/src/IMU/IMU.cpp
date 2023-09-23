@@ -1,5 +1,5 @@
 #include "IMU/IMU.h"
-
+#include "utils.h"
 
 double IMU::convert_raw_gyro(int gRaw) {
     double g = (gRaw * 1000.0) / 32768.0;

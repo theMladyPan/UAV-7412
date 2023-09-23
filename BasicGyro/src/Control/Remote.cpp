@@ -2,9 +2,9 @@
 
 
 Remote::Remote(){
-    Serial2.begin(115200, SERIAL_8N1, 32, 16);
-    Serial2.setTimeout(100);
-    _ibus.begin(Serial2,1);
+    Serial2.end();
+    ESP_LOGI("Remote", "Initializing IBus");
+    _ibus.begin(Serial2, 0, 32, 16); // Use hardware serial 2 for IBus, TIMER 3
 }
 
 

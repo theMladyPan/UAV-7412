@@ -4,7 +4,6 @@
 #include <BMI160Gen.h>
 #include <ArduinoEigenDense.h>
 #include "BaseIMU.h"
-#include "utils.h"
 
 class IMU: public BMI160GenClass, public BaseIMU {
 private:

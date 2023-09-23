@@ -34,10 +34,10 @@ private:
 
     BaseIMU *_imu;
     T* _regulator;
-    IServo _servo_taileron_l;
-    IServo _servo_taileron_r;
-    IServo _servo_rudder;
-    IServo _throttle;
+    IServo* _servo_taileron_l;
+    IServo* _servo_taileron_r;
+    IServo* _servo_rudder;
+    IServo* _throttle;
     
     // curent values for steering:
     float _throttle_value;  // 0-100%

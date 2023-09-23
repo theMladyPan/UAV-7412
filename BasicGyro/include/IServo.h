@@ -2,9 +2,9 @@
 #define ISERVO_H
 
 #include <stdint.h>
-#include "ESP32_ISR_Servo.hpp"  // This must be included first and only in main.cpp
+#include "ESP32_New_ISR_Servo.hpp" 
 
-static ESP32_ISR_Servo ServoImpl;
+// static ESP32_ISR_Servo ServoImpl;
 
 /**
  * @brief Servo class that uses ESP32_ISR_Servo library * 

@@ -3,15 +3,15 @@
 
 #include <ArduinoEigenDense.h>
 
-
 // Calculates the rotation matrix R that rotates v into w. 
 //
 // The rotation matrix is the orthogonal matrix that satisfies
 // the equation Rv = w.
 void calculateRotationMatrix(
-        const Eigen::Vector3d& v, 
-        const Eigen::Vector3d& w, 
-        Eigen::Matrix3d& R);
+    const Eigen::Vector3d& v, 
+    const Eigen::Vector3d& w, 
+    Eigen::Matrix3d& R
+);
 
 
 /**
@@ -25,5 +25,6 @@ void calculateRotationMatrix(
  * @return float The mapped value, or -1.0 if the input range is invalid (i.e., min == max).
  */
 float map(float x, float in_min, float in_max, float out_min, float out_max);
+
 
 #endif // UTILS_H
