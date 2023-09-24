@@ -29,8 +29,8 @@ TFT_eSPI tft = TFT_eSPI(135, 240);
 #endif // NDEBUG
 #define LOOP_PERIOD_US (1e6 / LOOP_FREQ_HZ)
 
-#define SERVO_ANGLE_MIN -45
-#define SERVO_ANGLE_MAX 45
+#define SERVO_ANGLE_MIN -60
+#define SERVO_ANGLE_MAX 60
 
 #ifdef I2C_SDA
 #undef I2C_SDA
@@ -73,6 +73,8 @@ void loop() {
     aircraft_params.loop_period_us = LOOP_PERIOD_US;
     aircraft_params.angle_min = SERVO_ANGLE_MIN;
     aircraft_params.angle_max = SERVO_ANGLE_MAX;
+    aircraft_params.max_thrust = 15;  // N
+    aircraft_params.mass = 1.5;  // kg
 
     ESP_LOGI("main", "Creating aircraft");
     Aircraft<PIDRegulator> aircraft(

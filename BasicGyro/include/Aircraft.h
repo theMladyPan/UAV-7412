@@ -19,6 +19,9 @@ typedef struct
     uint32_t loop_period_us;
     float angle_min;
     float angle_max;
+
+    float max_thrust;  // Newtons
+    float mass;  // kg
 } aircraft_param_t;
 
 

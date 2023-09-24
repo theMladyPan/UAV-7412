@@ -9,6 +9,11 @@ void Aircraft<T>::convert_acc_to_orientation() {
     // convert _acc_vals to roll, pitch
     // TODO: test more
 
+
+    double current_force = _throttle_value * _params.max_thrust / 100;
+    double a = current_force / _params.mass;
+    _acc_vals.x() = _acc_vals.x() - a;
+
     Eigen::Vector3d acc_norm = _acc_vals.normalized();
 
     _current_orientation[0] = asin(acc_norm[1]) * 180 / M_PI;
@@ -132,16 +137,8 @@ void Aircraft<T>::set_taileron_left(float angle) {
     if (_params.invert_taileron_left) {
         angle = -angle;
     }
-    /*
-    //clamp angle to -45, 45
-    if (angle > 45) {
-        angle = 45;
-    } else if (angle < -45) {
-        angle = -45;
-    }
-    */
     ESP_LOGD("Aircraft", "Setting taileron left to %f", angle);
-    _servo_taileron_l->set_angle(angle);
+    _servo_taileron_l->set_angle(angle, _params.angle_min, _params.angle_max);
 }
 
 
@@ -151,16 +148,8 @@ void Aircraft<T>::set_taileron_right(float angle) {
     if (_params.invert_taileron_right) {
         angle = -angle;
     }
-    /*
-    //clamp angle to -45, 45
-    if (angle > 45) {
-        angle = 45;
-    } else if (angle < -45) {
-        angle = -45;
-    }
-    */
     ESP_LOGD("Aircraft", "Setting taileron right to %f", angle);
-    _servo_taileron_r->set_angle(angle);
+    _servo_taileron_r->set_angle(angle, _params.angle_min, _params.angle_max);
 }
 
 
@@ -190,7 +179,7 @@ void Aircraft<T>::set_rudder() {
     // set rudder angle
     _rudder_value = _corrections[2];
     ESP_LOGD("Aircraft", "Setting rudder to %f", _rudder_value);
-    _servo_rudder->set_angle(_rudder_value);
+    _servo_rudder->set_angle(_rudder_value, _params.angle_min, _params.angle_max);
 }
 
 
@@ -202,49 +191,49 @@ void Aircraft<T>::pre_flight_check() {
     ESP_LOGI("Aircraft", "Rolling CCW");
     set_taileron_left(45);
     set_taileron_right(-45);
-    delay(1000);
+    delay(500);
 
     // roll cw
     ESP_LOGI("Aircraft", "Rolling CW");
     set_taileron_left(-45);
     set_taileron_right(45);
-    delay(1000);
+    delay(500);
 
     // zero roll
     ESP_LOGI("Aircraft", "Zeroing roll");
     set_taileron_left(0);
     set_taileron_right(0);
-    delay(1000);
+    delay(500);
 
     // pitch up
     ESP_LOGI("Aircraft", "Pitching up");
     set_taileron_left(45);
     set_taileron_right(45);
-    delay(1000);
+    delay(500);
 
     // pitch down
     ESP_LOGI("Aircraft", "Pitching down");
     set_taileron_left(-45);
     set_taileron_right(-45);
-    delay(1000);
+    delay(500);
 
     // zero pitch
     ESP_LOGI("Aircraft", "Zeroing pitch");
     set_taileron_left(0);
     set_taileron_right(0);
-    delay(1000);
+    delay(500);
     
     // rudder left
     ESP_LOGI("Aircraft", "Ruddering left");
     _corrections[2] = -45;
     set_rudder();
-    delay(1000);
+    delay(500);
 
     // rudder right
     ESP_LOGI("Aircraft", "Ruddering right");
     _corrections[2] = 45;
     set_rudder();
-    delay(1000);
+    delay(500);
 
     // zero rudder
     ESP_LOGI("Aircraft", "Zeroing rudder");

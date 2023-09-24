@@ -27,6 +27,15 @@ public:
      */
     void set_angle(float angle);
 
+    /**
+     * @brief Set the angle in degrees
+     * 
+     * @param angle -90°, 90° -> 500, 2500us
+     * @param angle_min minimum angle in degrees
+     * @param angle_max maximum angle in degrees     * 
+     */
+    void set_angle(float angle, float angle_min, float angle_max);
+
     void set_percent(float percent);
 
 private:
