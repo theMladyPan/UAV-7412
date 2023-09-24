@@ -7,9 +7,17 @@
 template <class T>
 void Aircraft<T>::convert_acc_to_orientation() {
     // convert _acc_vals to roll, pitch
-    // FIXME: this is not working properly, nan values are returned for some reason
-    _current_orientation[0] = asin(_acc_vals[1]) * 180 / M_PI;
-    _current_orientation[1] = -asin(_acc_vals[0]) * 180 / M_PI;
+    // TODO: test more
+
+    Eigen::Vector3d acc_norm = _acc_vals.normalized();
+
+    _current_orientation[0] = asin(acc_norm[1]) * 180 / M_PI;
+    _current_orientation[1] = -asin(acc_norm[0]) * 180 / M_PI;
+    if (std::isnan(_current_orientation[0]) || std::isnan(_current_orientation[1])) {
+        ESP_LOGE("Aircraft", "Nan values in orientation");
+        std::cout << "Acc vals: " << _acc_vals.transpose() << std::endl;
+        std::cout << "Orientation: " << _current_orientation.transpose() << std::endl;
+    }
     // yaw can be only obtained from GPS, aproximate from gyro:
     _current_orientation[2] = _gyro_vals[2] * _params.loop_period_us / 1e5;
 }

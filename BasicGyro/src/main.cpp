@@ -22,7 +22,11 @@ TFT_eSPI tft = TFT_eSPI(135, 240);
 #define PIN_THROTTLE 26
 #define PIN_SERVO_RUDDER 27
 
+#ifndef NDEBUG
+#define LOOP_FREQ_HZ 2.0
+#else
 #define LOOP_FREQ_HZ 200.0
+#endif // NDEBUG
 #define LOOP_PERIOD_US (1e6 / LOOP_FREQ_HZ)
 
 #define SERVO_ANGLE_MIN -45
@@ -55,7 +59,7 @@ void loop() {
     Imu->calibrate(100);
 
     pid_params_t pid_params = {
-        .kp = 1,
+        .kp = .8,
         .ki = 1,
         .kd = 0,
         .sampling_period = LOOP_PERIOD_US / 1e6  // 1s
@@ -90,7 +94,10 @@ void loop() {
     ESP_LOGI("main", "Creating controller");
     Remote *controller = new Remote();    
     ESP_LOGI("main", "Initiating pre-flight check");
+    
+    #ifdef NDEBUG
     aircraft.pre_flight_check();  // Turn on after testing
+    #endif // NDEBUG
 
     uint64_t loopn = 0;
     ESP_LOGI("main", "Entering main loop");

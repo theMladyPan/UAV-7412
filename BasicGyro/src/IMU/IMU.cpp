@@ -25,7 +25,10 @@ IMU::IMU() {
     ESP_LOGD("IMU", "Setting gyro range done.");
     this->setFullScaleAccelRange(BMI160_ACCEL_RANGE_2G);
     ESP_LOGD("IMU", "Setting accelerometer range done.");
-    delay(100);
+    this->setGyroDLPFMode(BMI160_DLPF_MODE_OSR4);
+    ESP_LOGD("IMU", "Setting gyro DLPF mode done.");
+    this->setAccelDLPFMode(BMI160_DLPF_MODE_OSR4);
+    ESP_LOGD("IMU", "Setting accelerometer DLPF mode done.");
 }
 
 void IMU::get_rotations_dps(Eigen::Vector3d &rotations) {
