@@ -22,6 +22,16 @@ TFT_eSPI tft = TFT_eSPI(135, 240);
 #define PIN_THROTTLE 26
 #define PIN_SERVO_RUDDER 27
 
+#ifdef MIN_PULSE_WIDTH
+#undef MIN_PULSE_WIDTH
+#define MIN_PULSE_WIDTH 540
+#endif // MIN_PULSE_WIDTH
+
+#ifdef MAX_PULSE_WIDTH
+#undef MAX_PULSE_WIDTH
+#define MAX_PULSE_WIDTH 2400
+#endif // MAX_PULSE_WIDTH
+
 #ifndef NDEBUG
 #define LOOP_FREQ_HZ 2.0
 #else
@@ -59,8 +69,8 @@ void loop() {
     Imu->calibrate(100);
 
     pid_params_t pid_params = {
-        .kp = .8,
-        .ki = 1,
+        .kp = 1,
+        .ki = 2,
         .kd = 0,
         .sampling_period = LOOP_PERIOD_US / 1e6  // 1s
     };
@@ -70,6 +80,7 @@ void loop() {
     aircraft_params.invert_taileron_right = true;
     aircraft_params.control_rudder = true;
     aircraft_params.control_throttle = true;
+    aircraft_params.invert_rudder = true;
     aircraft_params.loop_period_us = LOOP_PERIOD_US;
     aircraft_params.angle_min = SERVO_ANGLE_MIN;
     aircraft_params.angle_max = SERVO_ANGLE_MAX;
@@ -98,6 +109,7 @@ void loop() {
     ESP_LOGI("main", "Initiating pre-flight check");
     
     #ifdef NDEBUG
+    ESP_LOGW("main", "Pre-flight initiating pre-flight check");+
     aircraft.pre_flight_check();  // Turn on after testing
     #endif // NDEBUG
 
